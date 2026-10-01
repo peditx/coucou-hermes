@@ -127,8 +127,13 @@ jobs:
           # "release already exists".
           gh release delete "${{ github.ref_name }}" `
             --repo peditx/coucou-hermes --cleanup-tag --yes 2>$null
+          # The portable pair rides along: Defender quarantines the installer
+          # for some people, and hooks.rs finds coucou-hook.exe right next to
+          # coucou.exe, which is exactly this layout.
           gh release create "${{ github.ref_name }}" `
             "release/Coucou-Windows-$v-setup.exe" `
+            "target/release/coucou.exe" `
+            "target/release/coucou-hook.exe" `
             --repo peditx/coucou-hermes `
             --target "${{ github.sha }}" `
             --title "Coucou for Windows $v" `
