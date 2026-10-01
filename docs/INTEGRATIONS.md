@@ -111,7 +111,8 @@ Permissions: Screen Recording (capture) and Automation (browser). If denied: car
 ## 5. Claude API (search)
 
 - `POST https://api.anthropic.com/v1/messages`, headers `x-api-key`, `anthropic-version`, `content-type: application/json` (versions to check in the docs).
-- Default model: `claude-sonnet-5`, configurable in Settings. Check the list of available models in the docs.
+- Default model: `claude-sonnet-4-6`, chosen in Settings → Anthropic API. The list is fetched when Settings loads via `GET /v1/models?limit=100` (headers `x-api-key` and `anthropic-version: 2023-06-01`); if the call fails or there is no key, a fallback list is used (`claude-sonnet-4-6`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-haiku-4-5-20251001`). A free-text field accepts any identifier. If the saved model is not in the list, the picker stays on "Custom…".
+- API errors: show `error.message` instead of the raw JSON. For a `not_found_error`, show "Model not found: \<id\>. Pick another one in Settings."
 - Server-side web search tool on the API: the up-to-date type id is in the docs (as of writing, `web_search_20250305`); `max_uses` 5.
 - System prompt (English, for the notch UI): answer briefly, for display in the notch, in strict JSON format:
   ```json
