@@ -29,9 +29,9 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
 }
 
 /** A labelled dropdown bound to one field of `settings`; the caller saves. */
-function select(options: [string, string][], value: string, onChange: (v: string) => void): HTMLElement {
+function select<T extends string>(options: [T, string][], value: T, onChange: (v: T) => void): HTMLElement {
   const el = h("select", {}) as HTMLSelectElement;
-  const all = options.some(([id]) => id === value) ? options : [...options, [value, value]];
+  const all = options.some(([id]) => id === value) ? options : [...options, [value, value] as [T, string]];
   for (const [id, label] of all) el.append(h("option", { value: id, text: label }));
   el.value = value;
   el.addEventListener("change", () => onChange(el.value));
@@ -260,12 +260,12 @@ function apiSection(hasKey: boolean): HTMLElement {
 
 // ── Island chat engine ───────────────────────────────────────────────────────
 
-const ENGINES: [string, string][] = [
+const ENGINES: [Settings["chatEngine"], string][] = [
   ["claude", "Claude — Anthropic API"],
   ["hermes", "Hermes — remote agent"],
 ];
 
-const FALLBACKS: [string, string][] = [
+const FALLBACKS: [Settings["chatFallback"], string][] = [
   ["none", "No fallback"],
   ["claude", "Claude"],
   ["hermes", "Hermes"],

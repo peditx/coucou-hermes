@@ -60,6 +60,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # tauri.conf.json bundles ../target/release/coucou-hook and tauri_build
+      # fails the build when that file is missing. `npm run pack` produces it
+      # through prebuild, but the tests run before that step ever happens.
+      - name: Build the hook that tauri bundles
+        run: cargo build --release -p coucou-hook
+
       # The Rust tests are cheap and this port touched exactly the files they
       # cover (settings paths, hook merge, the relay protocol).
       - name: Run the Rust tests
