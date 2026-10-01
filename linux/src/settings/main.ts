@@ -402,7 +402,7 @@ function hermesSection(): HTMLElement {
     feedback,
     h("div", {
       class: "hint",
-      text: "For local file access from the remote agent: on the Hermes machine, edit ~/.hermes/config.yaml → mcp_servers.coucou.url = "https://<your-tunnel>/mcp" + Authorization: Bearer <token>. Then run /reload-mcp in Hermes. The token goes in ~/.hermes/.env, not in the YAML.",
+      text: "For local file access from the remote agent: on the Hermes machine, edit ~/.hermes/config.yaml → mcp_servers.coucou.url = \"https://<your-tunnel>/mcp\" + Authorization: Bearer <token>. Then run /reload-mcp in Hermes. The token goes in ~/.hermes/.env, not in the YAML.",
     }),
   );
 }

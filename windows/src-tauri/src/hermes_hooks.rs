@@ -293,12 +293,12 @@ fn set_list_item(lines: &mut Vec<String>, path: &[&str], item: &str) -> Result<(
     // would otherwise still be borrowing.
     let (key, value) = match key_of(&lines[idx]) {
         Some((key, value)) => (key.to_string(), value.to_string()),
-        None => return,
+        None => return Ok(()),
     };
 
     // Inline form: `enabled: [a, b]` — extended where it stands.
     if value.starts_with('[') {
-        if inline_has(value, item) {
+        if inline_has(&value, item) {
             return Ok(());
         }
         let close = value
@@ -368,7 +368,7 @@ fn remove_list_item(lines: &mut Vec<String>, path: &[&str], item: &str) {
     };
 
     if value.starts_with('[') {
-        if !inline_has(value, item) {
+        if !inline_has(&value, item) {
             return;
         }
         let kept = value
@@ -407,7 +407,7 @@ fn remove_list_item(lines: &mut Vec<String>, path: &[&str], item: &str) {
 
 /// The mappings above the leaf, outermost first — used to tidy up what we
 /// emptied.
-fn parent_keys_of(path: &[&str]) -> Vec<&str> {
+fn parent_keys_of<'a>(path: &[&'a str]) -> Vec<&'a str> {
     path[..path.len().saturating_sub(1)].to_vec()
 }
 
@@ -474,7 +474,7 @@ fn without_keys(text: &str) -> Result<String, String> {
             remove_key(&mut lines, Some(approval), "transport_fallback", "builtin");
             if child_lines(&lines, approval).is_empty() {
                 lines.remove(approval);
-                drop_empty_mapping(&lines, vec!["security"]);
+                drop_empty_mapping(&mut lines, vec!["security"]);
             }
         }
     }
