@@ -4,6 +4,10 @@
 
 # Coucou
 
+[🇮🇷 فارسی](README-fa.md) · [🇸🇦 العربية](README-ar.md) · [🇷🇺 Русский](README-ru.md) · [🇨🇳 中文](README-ch.md)
+
+**Original repository:** [Louis-CFM/coucou](https://github.com/Louis-CFM/coucou) — this is a fork with CI/CD rearranged for multi-platform releases.
+
 **A tiny friend that lives in your Mac's notch — or at the top of your screen on Windows and Linux — and keeps an eye on your Claude Code sessions.**
 
 Approve permissions, watch your agents work, drop a file, chat with Claude — all without leaving what you're doing.
@@ -32,11 +36,11 @@ Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch
 
 ## Features
 
-- 🤖 **Claude Code, live** — see every session in your notch: what it reads, edits and runs, step by step. Finished? Mochi does a happy little jump.
-- ✅ **Approve from the notch** — Claude Code permission requests show up with **Allow / Deny**. One click, back to work.
+- 🤖 **Claude Code & Hermes Agent, live** — see every session in your notch: what it reads, edits and runs, step by step. Works with both engines. Finished? Mochi does a happy little jump.
+- ✅ **Approve from the notch** — permission requests (Claude Code or Hermes) show up with **Allow / Deny**. One click, back to work.
 - 🧑‍💻 **Jump to the right terminal** — open the exact terminal window of a session *(macOS)*.
-- 💬 **Ask Claude anything** — built-in chat, straight from the notch. Pick the model in Settings; the list comes from your Anthropic account.
-- 🪽 **Hermes too** — point Coucou at a remote [Hermes Agent](https://github.com/NousResearch/hermes-agent) and open a full-screen chat with it, like a desktop chat app. The island chat can also be served by Hermes: you pick the engine *and* the fallback in Settings, and nothing switches on its own. [Details](docs/HERMES.md).
+- 💬 **Chat with Claude or Hermes** — built-in chat, straight from the notch. Pick the model in Settings; the list comes from your Anthropic account or point Coucou at a remote [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+- 🪽 **Full-screen Hermes chat** — open a desktop-style chat window with Hermes Agent. The island chat can also be served by Hermes: you pick the **Engine** (Claude / Hermes) and **Fallback** (None / Claude / Hermes) in Settings — nothing switches on its own. [Details](docs/HERMES.md).
 
 - 📎 **Drop a file on the notch** — Mochi turns into a box and swallows it, then ask a question about it or send it by email *(email: macOS, Mail.app)*.
 - 🪟 **Drag Mochi onto any window** — attach that window as context for Claude *(macOS)*.
@@ -132,7 +136,7 @@ Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows, Li
 
 | What | Why | Where the key goes |
 |---|---|---|
-| **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
+| **Claude Code hooks** | live sessions & approvals (Claude Code + Hermes) | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
 | **Anthropic API key** | chat and questions about files | Keychain / Credential Manager / Secret Service |
 | **Hermes URL + key** *(optional)* | the full-screen Hermes chat, and the island chat if you pick Hermes as its engine; for local files from the remote agent, add MCP on the Hermes side | Keychain / Credential Manager / Secret Service |
 | Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Credential Manager / Secret Service, all optional |
@@ -157,7 +161,7 @@ If Coucou isn't running, the hook exits immediately: **Claude Code is never bloc
 
 - **Island**: a borderless `NSPanel` hugging the notch, driven by a small state machine (`hidden → petit → home`).
 - **Character**: drawn in SwiftUI `Canvas` + `TimelineView` at 60 fps — squircle body, eyes projected on a sphere, spring animations. No Rive, no Lottie, no images.
-- **Claude Code**: a tiny `nb-hook` script receives hook events and forwards them over a Unix socket to the app. For approvals it waits for your click, then answers the hook.
+- **Claude Code & Hermes**: a tiny `nb-hook` / `coucou-hook` script receives hook events and forwards them over a Unix socket (named pipe on Windows) to the app. For approvals it waits for your click, then answers the hook. Works with both engines.
 - **Integrations**: lightweight pollers, paused when nothing is watching.
 - **Sounds**: 28 short WAVs played through preloaded `AVAudioPlayer`s.
 
