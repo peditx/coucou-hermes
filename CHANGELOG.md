@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Maintainer metadata is PeDitX now — `authors` in both `Cargo.toml` files (shows up as the Debian `Maintainer` field) and `copyright` in both `tauri.conf.json` files (Windows file properties)
+- Releases no longer claim macOS: this fork ships Linux and Windows, macOS comes from the original publisher
+
 ## 0.1.2
 
 - Hermes Agent — live sessions and approvals in the island on macOS, Windows and Linux: a plugin at `~/.hermes/plugins/coucou/` feeds the same relay Claude Code uses, installed from Settings with the same backup → diff → confirm flow

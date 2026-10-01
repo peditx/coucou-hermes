@@ -48,17 +48,13 @@ jobs:
             --title "Coucou $v" \
             --latest \
             --notes "$(cat <<EOF
-          Coucou $v — macOS, and this release has no binary attached.
-
-          The shipping macOS app is built and notarised locally with scripts/release.sh;
-          CI only proves it compiles on a clean machine, which is what this tag records.
-          An unsigned zip here would break the download link on the site.
+          Coucou $v — one tag, every platform this fork ships.
 
           Linux (.deb / .rpm) and Windows (installer + portable) packages for this very
-          same commit are attached to the linux-v$v and windows-v$v releases.
+          same commit are attached to this release: they are merged here from the
+          linux-v$v and windows-v$v builds.
 
-          In 0.1.2: the Hermes hooks plugin — live sessions and approvals for Hermes in
-          the island, installed from Settings with the same backup, diff and confirm
-          flow as the Claude Code hooks.
+          macOS is not built here — take it from the original publisher,
+          Louis-CFM/coucou. CI still compiles the Swift sources on every tag.
           EOF
           )"
