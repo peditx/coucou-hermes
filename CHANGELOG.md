@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Global shortcut that reveals the island (`Ctrl+Shift+N` by default) — Windows and Linux, off until you switch it on in Settings
+- Linux: the panel no longer swallows clicks — when the island is folded, clicks fall through to the window underneath (X11)
+- Settings puts Hermes first and spells out that the Hermes plugin is a file copied to `~/.hermes/plugins/coucou/`, not part of the app
+- The island's Settings view shows the Hermes plugin's install state beside Claude Code's
+
 ## 0.1.3
 
 - Maintainer metadata is PeDitX now — `authors` in both `Cargo.toml` files (shows up as the Debian `Maintainer` field) and `copyright` in both `tauri.conf.json` files (Windows file properties)
