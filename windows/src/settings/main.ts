@@ -34,7 +34,8 @@ function select<T extends string>(options: [T, string][], value: T, onChange: (v
   const all = options.some(([id]) => id === value) ? options : [...options, [value, value] as [T, string]];
   for (const [id, label] of all) el.append(h("option", { value: id, text: label }));
   el.value = value;
-  el.addEventListener("change", () => onChange(el.value));
+  // el.value is a plain string; T only promises it is one of the option ids.
+  el.addEventListener("change", () => onChange(el.value as T));
   return el;
 }
 
