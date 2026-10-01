@@ -386,8 +386,26 @@ function hermesSection(): HTMLElement {
     state,
     h("div", {
       class: "hint",
-      text: "Hermes Agent is a separate app you run (locally or on a remote machine). Coucou only talks to its OpenAI-compatible API server. Install: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash, then run `hermes`. The API server listens on 127.0.0.1:8642 by default (set API_SERVER_HOST/PORT to change).",
+      text: "Hermes Agent is a separate app you run (locally or on a remote machine); Coucou only talks to its OpenAI-compatible API server. Run these four in order, then paste the URL and the key below:",
     }),
+    // One block, not four sentences: this is run in one place in one order, and
+    // half a recipe is how people end up with an API server that never starts —
+    // API_SERVER_ENABLED defaults to false, so step 2 is not optional.
+    h("div", { class: "diff" }, [
+      " 1  Install Hermes\n",
+      "    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash\n",
+      "\n",
+      " 2  Copy for Hermes — its key lives in ~/.hermes/.env\n",
+      "    API_SERVER_ENABLED=true\n",
+      "    API_SERVER_KEY=<any secret you pick>\n",
+      "\n",
+      " 3  Start the API server — http://127.0.0.1:8642 unless API_SERVER_HOST / API_SERVER_PORT say otherwise\n",
+      "    hermes gateway\n",
+      "    → [API Server] listening on http://127.0.0.1:8642\n",
+      "\n",
+      " 4  Copy and back up ~/.hermes/config.yaml before anything edits it\n",
+      "    cp ~/.hermes/config.yaml ~/.hermes/config.yaml.bak-$(date +%F-%H%M%S)",
+    ].join("")),
     h("div", { class: "row" }, h("label", { text: "API server URL" }), urlField, saveUrl),
     h("div", {
       class: "hint",
@@ -396,13 +414,13 @@ function hermesSection(): HTMLElement {
     h("div", { class: "row" }, h("label", { text: "Key" }), keyField, saveKey, clearKey),
     h("div", {
       class: "hint",
-      text: "The API_SERVER_KEY from the Hermes side (shown on first run, or in ~/.hermes/.env). This key never leaves your Secret Service.",
+      text: "The API_SERVER_KEY you wrote in step 2 — it lives in ~/.hermes/.env and never leaves your Windows Credential Manager.",
     }),
     h("div", { class: "row" }, openChat),
     feedback,
     h("div", {
       class: "hint",
-      text: "For local file access from the remote agent: on the Hermes machine, edit ~/.hermes/config.yaml → mcp_servers.coucou.url = \"https://<your-tunnel>/mcp\" + Authorization: Bearer <token>. Then run /reload-mcp in Hermes. The token goes in ~/.hermes/.env, not in the YAML.",
+      text: "Local files: Hermes would need an MCP endpoint on this machine, and Coucou does not expose one yet — plan, not shipped (docs/HERMES.md §2). What talks today: the API server above for chat, and Hermes hooks below for sessions and approvals in the island.",
     }),
   );
 }

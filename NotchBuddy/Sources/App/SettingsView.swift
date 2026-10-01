@@ -148,7 +148,11 @@ struct SettingsView: View {
                                 NotificationCenter.default.post(name: .openHermesChat, object: nil)
                             }
                         }
-                        Text("For local file access from the remote agent: on the Hermes machine, edit ~/.hermes/config.yaml → mcp_servers.coucou.url = \"https://<your-tunnel>/mcp\" + Authorization: Bearer <token>. Then run /reload-mcp in Hermes. The token goes in ~/.hermes/.env, not in the YAML.")
+                        Text("Run these four in order, then paste the URL and the key above:\n 1  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash\n 2  ~/.hermes/.env → API_SERVER_ENABLED=true and API_SERVER_KEY=<any secret you pick>\n 3  hermes gateway   → listening on http://127.0.0.1:8642\n 4  cp ~/.hermes/config.yaml ~/.hermes/config.yaml.bak-$(date +%F-%H%M%S)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.secondary)
+
+                        Text("Local files: Hermes would need an MCP endpoint on this machine, and Coucou does not expose one yet — plan, not shipped (docs/HERMES.md §2). What talks today: the API server above for chat, and the hooks below.")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }

@@ -45,6 +45,37 @@ Open-source (MIT) agent from Nous Research. Install with
 `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`, then `hermes`.
 Config and data live in `~/.hermes` (`%LOCALAPPDATA%\hermes` on native Windows).
 
+### The four commands, in order
+
+Settings → *Hermes Agent* shows this block; it is here because every line of it
+comes from the official API-server docs, and those are the ones to re-read
+before changing it.
+
+```bash
+# 1  install
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+
+# 2  copy for Hermes — its key, in ~/.hermes/.env
+API_SERVER_ENABLED=true
+API_SERVER_KEY=<any secret you pick>
+
+# 3  start it — http://127.0.0.1:8642 unless API_SERVER_HOST / API_SERVER_PORT say otherwise
+hermes gateway
+# → [API Server] listening on http://127.0.0.1:8642
+
+# 4  copy and back up ~/.hermes/config.yaml before anything edits it
+cp ~/.hermes/config.yaml ~/.hermes/config.yaml.bak-$(date +%F-%H%M%S)
+```
+
+Then the URL and that same key go into Coucou's *Hermes Agent* section — which
+is the whole connection: Coucou is a client of this server and nothing else.
+
+The order is load-bearing twice. `API_SERVER_ENABLED` defaults to `false`, so
+step 2 is not optional, and a key has no default — it is required even on the
+loopback bind. Step 4 runs before anything writes: the installer takes its own
+dated backup anyway, but one `cp` covers the edits you make by hand, which is
+where a config file actually gets lost.
+
 Three integration protocols, and only one of them fits Coucou:
 
 | Protocol | Transport | Fits Coucou? |
