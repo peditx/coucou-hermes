@@ -57,8 +57,8 @@ jobs:
           Linux (.deb / .rpm) and Windows (installer + portable) packages for this very
           same commit are attached to the linux-v$v and windows-v$v releases.
 
-          In 0.1.1: the Linux app for the first time, the Hermes Agent chat on all three
-          platforms, and an explicit choice of island chat engine and fallback in
-          Settings — nothing switches on its own.
+          In 0.1.2: the Hermes hooks plugin — live sessions and approvals for Hermes in
+          the island, installed from Settings with the same backup, diff and confirm
+          flow as the Claude Code hooks.
           EOF
           )"
