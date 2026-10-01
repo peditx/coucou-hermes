@@ -6,6 +6,7 @@ import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { Ticker } from "./ticker";
 import { State, type AgentTask } from "../core/state";
+import { Bridge } from "../core/bridge";
 import { washRGBA, type IslandViewName, type Wash } from "../core/layout";
 import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
@@ -419,6 +420,17 @@ function buildSettings(actions: ViewActions): ViewHost {
   );
   const claudeBadge = h("span", { class: "status-badge" });
   const apiBadge = h("span", { class: "status-badge" });
+  const hermesBadge = h("span", { class: "status-badge" });
+  // Read on the way in, not on every state change: the plugin only appears or
+  // disappears when somebody clicks Install in the Settings window.
+  let hermesInstalled = false;
+  let wasSettings = false;
+  const refreshHermes = () => {
+    void Bridge.hermesHooksStatus().then((s) => {
+      if (s) hermesInstalled = s.installed;
+      State.notify();
+    }).catch(() => {});
+  };
 
   const rows = h(
     "div",
@@ -444,6 +456,24 @@ function buildSettings(actions: ViewActions): ViewHost {
         onclick: () => actions.openSettingsWindow(),
       }),
     ),
+    // Under the Claude badge, because that is where somebody looks when they
+    // want to know what this island is talking to. The row is the way in.
+    h(
+      "div",
+      {
+        class: "settings-row",
+        style: "cursor:pointer",
+        title: "Open Settings",
+        onclick: () => actions.openSettingsWindow(),
+      },
+      hermesBadge,
+      h("div", { class: "grow" }),
+      h("span", {
+        class: "link-btn",
+        style: "color:#8e939c;font-size:11.5px;cursor:pointer",
+        text: "Open Settings…",
+      }),
+    ),
   );
 
   const el = h("div", { class: "view" },
@@ -465,6 +495,14 @@ function buildSettings(actions: ViewActions): ViewHost {
       );
       clear(apiBadge);
       apiBadge.append(dot("#F4505E", 6), h("span", { text: "API" }));
+      const inSettings = State.view === "settings";
+      if (inSettings && !wasSettings) refreshHermes();
+      wasSettings = inSettings;
+      clear(hermesBadge);
+      hermesBadge.append(
+        dot(hermesInstalled ? "#22C55E" : "#F4505E", 6),
+        h("span", { text: "Hermes plugin" }),
+      );
     },
   };
 }

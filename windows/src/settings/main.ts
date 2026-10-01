@@ -436,8 +436,12 @@ function hermesHooksSection(status: HermesHookStatus): HTMLElement {
       h("div", {
         class: "hint",
         text: status.installed
-          ? "Hermes is hooked in. Session events show up in the island exactly like Claude Code's, and permission requests can be answered there."
-          : "Install the plugin to see your Hermes sessions in the island and answer its permission requests there. The hooks in ~/.claude are untouched.",
+          ? "Hermes is hooked in. Session events show up in the island, and permission requests can be answered there."
+          : "Install the plugin to see your Hermes sessions in the island and answer its permission requests there.",
+      }),
+      h("div", {
+        class: "hint",
+        text: "The plugin is a file, not a part of this app: Install copies it to ~/.hermes/plugins/coucou/ and Hermes loads it from there. Coucou only carries a copy so the install needs no network.",
       }),
       h("div", { class: "row" },
         h("label", { text: "config.yaml" }),
@@ -748,11 +752,11 @@ async function main() {
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
-    claudeSection(status),
-    apiSection(hasKey),
-    engineSection(hasKey, hermesOk),
     hermesSection(),
     hermesHooksSection(hermesHooks),
+    engineSection(hasKey, hermesOk),
+    claudeSection(status),
+    apiSection(hasKey),
     integrationsSection(present),
     generalSection(),
     h("div", {
