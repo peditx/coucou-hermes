@@ -30,6 +30,28 @@ jobs:
             -project NotchBuddy/NotchBuddy.xcodeproj \
             -scheme NotchBuddy \
             -configuration Release \
+            -derivedDataPath build \
             build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
+
+      # ditto, not zip: it keeps the exec bit and the bundle's symlinks, which
+      # a plain archive step loses — and an app without the exec bit will not
+      # open at all.
+      - name: Package
+        run: |
+          ditto -c -k --keepParent \
+            build/Build/Products/Release/NotchBuddy.app \
+            NotchBuddy-macOS.zip
+
+      # An unsigned build must never reach a release: the shipping app is
+      # notarised locally with scripts/release.sh, and releases/latest is what
+      # the site's Download button follows. So the output goes to an artifact
+      # instead — the compile output of this push, for whoever needs a Mac
+      # binary. The repo is public and artifacts are readable by any signed-in
+      # GitHub user, hence 3 days, same as the Windows uploads.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Coucou-macOS
+          path: NotchBuddy-macOS.zip
+          retention-days: 3
