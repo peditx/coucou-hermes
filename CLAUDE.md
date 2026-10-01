@@ -10,6 +10,7 @@ Coucou has three code bases for one product: Mochi, a small animated character, 
 - `NotchBuddy/Sources/App/` — all Swift code. `NotchBuddy/Resources/sounds/` — the 28 WAV sounds. `NotchBuddy/project.yml` — XcodeGen project (never edit the `.xcodeproj` by hand).
 - `docs/SPEC.md`, `docs/INTEGRATIONS.md` — behaviour, views, states, integrations.
 - `docs/HERMES.md` — the Hermes Agent integration: what is shipped, what is still plan.
+- `hermes-plugin/` — the Hermes plugin (`plugin.yaml` + `__init__.py`), shared by all three code bases: the Tauri builds `include_str!` it, the Mac app bundles it as a folder resource. Edit it here, never in a copy.
 - `design/prototype/notch-buddy.html` — original prototype, the visual source of truth. `design/captures/` — target screenshots.
 - `docs/*.html` — the GitHub Pages site (privacy, terms, support, legal notice).
 

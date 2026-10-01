@@ -3,7 +3,7 @@
 // integrations land here too in a later stage.
 
 import "./settings.css";
-import { Bridge, onEvent, type HookStatus } from "../core/bridge";
+import { Bridge, onEvent, type HermesHookStatus, type HookStatus } from "../core/bridge";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
@@ -407,6 +407,140 @@ function hermesSection(): HTMLElement {
   );
 }
 
+// ── Hermes hooks section ──────────────────────────────────────────────────────
+// The mirror of claudeSection: same relay, same backup/diff/confirm discipline,
+// only the destination changes — ~/.hermes/config.yaml plus one plugin instead
+// of ~/.claude/settings.json.
+
+function hermesHooksSection(status: HermesHookStatus): HTMLElement {
+  const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
+  const section = h(
+    "section",
+    {},
+    h("h2", {}, statusDot(status.installed), h("span", { text: "Hermes hooks" })),
+    body,
+  );
+
+  const rebuild = async () => {
+    const fresh = await Bridge.hermesHooksStatus();
+    if (fresh) Object.assign(status, fresh);
+    clear(body);
+    draw();
+    const head = section.querySelector("h2")!;
+    clear(head);
+    head.append(statusDot(status.installed), h("span", { text: "Hermes hooks" }));
+  };
+
+  function draw() {
+    body.append(
+      h("div", {
+        class: "hint",
+        text: status.installed
+          ? "Hermes is hooked in. Session events show up in the island exactly like Claude Code's, and permission requests can be answered there."
+          : "Install the plugin to see your Hermes sessions in the island and answer its permission requests there. The hooks in ~/.claude are untouched.",
+      }),
+      h("div", { class: "row" },
+        h("label", { text: "config.yaml" }),
+        h("span", { class: "path", text: status.configPath }),
+      ),
+      h("div", { class: "row" },
+        h("label", { text: "Plugin" }),
+        h("span", { class: "path", text: status.pluginPath }),
+      ),
+      h("div", { class: "row" },
+        h("label", { text: "Relay" }),
+        statusDot(status.hookReady),
+      ),
+    );
+
+    if (!status.hookReady) {
+      body.append(h("div", {
+        class: "notice warn",
+        text: "coucou-hook.exe is not in place yet. Restart Coucou; if it still fails, build it with `cargo build -p coucou-hook`.",
+      }));
+    }
+
+    const actions = h("div", { class: "row" });
+    const install = h("button", {
+      class: "primary",
+      text: status.installed ? "Reinstall plugin…" : "Install plugin…",
+      onclick: () => showPreview(true),
+    });
+    if (!status.hookReady) {
+      install.disabled = true;
+      install.title = "The relay isn't installed yet.";
+    }
+    actions.append(install);
+    if (status.installed) {
+      actions.append(h("button", {
+        class: "danger",
+        text: "Uninstall plugin…",
+        onclick: () => showPreview(false),
+      }));
+    }
+    body.append(actions);
+  }
+
+  async function showPreview(install: boolean) {
+    let preview;
+    try {
+      preview = await Bridge.hermesHooksPreview(install);
+    } catch (err) {
+      clear(body);
+      body.append(
+        h("div", { class: "notice err", text: String(err).replace(/^Error:\s*/, "") }),
+        h("div", { class: "row" }, h("button", {
+          text: "Back",
+          onclick: () => { clear(body); draw(); },
+        })),
+      );
+      return;
+    }
+    if (!preview) return;
+    clear(body);
+    body.append(
+      h("div", {
+        class: "hint",
+        text: install
+          ? "This is exactly what will change in your Hermes config. Your own settings are left untouched."
+          : "This removes Coucou's entries only. Your own Hermes settings are left untouched.",
+      }),
+      renderDiff(preview.diff),
+      h("div", { class: "row" },
+        h("span", { class: "path", text: `Backup → ${preview.backup}` }),
+      ),
+    );
+    const confirm = h("button", {
+      class: install ? "primary" : "danger",
+      text: install ? "Back up and write" : "Back up and remove",
+    });
+    confirm.addEventListener("click", async () => {
+      confirm.disabled = true;
+      try {
+        const backup = await Bridge.hermesHooksApply(install, preview.fingerprint);
+        clear(body);
+        body.append(h("div", {
+          class: "notice ok",
+          text: backup
+            ? `Done. Previous config saved as ${backup}. Start a new Hermes session to pick it up.`
+            : "Done. Start a new Hermes session to pick it up.",
+        }));
+        window.setTimeout(() => void rebuild(), 2600);
+      } catch (err) {
+        confirm.disabled = false;
+        body.append(h("div", { class: "notice err", text: `Could not write: ${String(err)}` }));
+      }
+    });
+    body.append(h("div", { class: "row" }, confirm, h("button", {
+      text: "Cancel",
+      onclick: () => { clear(body); draw(); },
+    })));
+  }
+
+  draw();
+  return section;
+}
+
 // ── Integrations section ──────────────────────────────────────────────────────
 
 interface IntegrationDef {
@@ -582,6 +716,9 @@ async function main() {
     installed: false, settingsPath: "", hookPath: "", hookReady: false,
   };
 
+  const hermesHooks = (await Bridge.hermesHooksStatus()) ?? {
+    installed: false, configPath: "", pluginPath: "", hookReady: false,
+  };
   const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
   const hermesOk = (await Bridge.hermesConfigured()) ?? false;
 
@@ -599,6 +736,7 @@ async function main() {
     apiSection(hasKey),
     engineSection(hasKey, hermesOk),
     hermesSection(),
+    hermesHooksSection(hermesHooks),
     integrationsSection(present),
     generalSection(),
     h("div", {

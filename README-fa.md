@@ -136,7 +136,8 @@ npm run pack                # .deb + .rpm land in linux/release/
 
 | چه چیزی | چرا | کلید کجا می‌رود |
 |---|---|---|
-| **هوک‌های Claude Code** | جلسات زنده و تأییدها (Claude Code + Hermes) | **Install hooks** — Coucou از `~/.claude/settings.json` نسخهٔ پشتیبان می‌گیرد، هوک‌هایش را ادغام می‌کند و پیش از نوشتنِ هر چیزی، diff را به شما نشان می‌دهد |
+| **هوک‌های Claude Code** | جلسات زنده و تأییدها (Claude Code) | **Install hooks** — Coucou از `~/.claude/settings.json` نسخهٔ پشتیبان می‌گیرد، هوک‌هایش را ادغام می‌کند و پیش از نوشتنِ هر چیزی، diff را به شما نشان می‌دهد |
+| **هوک‌های Hermes** | جلسات زنده و تأییدها برای Hermes Agent | **Install plugin** — Coucou از `~/.hermes/config.yaml` نسخهٔ پشتیبان می‌گیرد، سه کلیدش را اضافه می‌کند و پیش از نوشتن، diff را به شما نشان می‌دهد |
 | **کلید Anthropic API** | چت و پرسش دربارهٔ فایل‌ها | Keychain / Credential Manager / Secret Service |
 | **URL و کلید Hermes** *(اختیاری)* | چت تمام‌صفحهٔ Hermes، و چت جزیره اگر Hermes را به‌عنوان موتورش انتخاب کنید؛ برای فایل‌های محلی از agent راه‌دور، در سمت Hermes مقدار MCP اضافه کنید | Keychain / Credential Manager / Secret Service |
 | Stripe، n8n، GitHub، Vercel، Resend، Notion، Cal.com | قرص‌های یکپارچه‌سازی | Keychain / Credential Manager / Secret Service، همه اختیاری |
@@ -161,7 +162,7 @@ npm run pack                # .deb + .rpm land in linux/release/
 
 - **جزیره**: یک `NSPanel` بدون حاشیه که به notch می‌چسبد و با یک ماشین وضعیتِ کوچک (`hidden → petit → home`) هدایت می‌شود.
 - **شخصیت**: با SwiftUI `Canvas` و `TimelineView` با نرخ ۶۰ فریم بر ثانیه رسم می‌شود — بدنهٔ squircle، چشم‌های پروژکت‌شده روی یک کره، انیمیشن‌های فنری. بدون Rive، بدون Lottie، بدون تصویر.
-- **Claude Code و Hermes**: یک اسکریپت کوچک `nb-hook` / `coucou-hook` رویدادهای هوک را دریافت می‌کند و از طریق یک Unix socket (در Windows، named pipe) به برنامه می‌فرستد. برای تأییدها منتظر کلیک شما می‌ماند و بعد به هوک پاسخ می‌دهد. با هر دو موتور کار می‌کند.
+- **Claude Code و Hermes**: یک اسکریپت کوچک `nb-hook` / `coucou-hook` رویدادهای هوک را دریافت می‌کند و از طریق یک Unix socket (در Windows، named pipe) به برنامه می‌فرستد، و افزونهٔ Hermes در `~/.hermes/plugins/coucou/` همین relay را تغذیه می‌کند. برای تأییدها منتظر کلیک شما می‌ماند و بعد به هوک پاسخ می‌دهد. با هر دو موتور کار می‌کند.
 - **یکپارچه‌سازی‌ها**: pollerهای سبک‌وزن، که وقتی چیزی زیر نظر نیست متوقف می‌شوند.
 - **صداها**: ۲۸ فایل WAV کوتاه که از طریق `AVAudioPlayer`های از قبل بارگذاری‌شده پخش می‌شوند.
 
@@ -170,7 +171,7 @@ npm run pack                # .deb + .rpm land in linux/release/
 **Windows**
 
 - یک برنامهٔ [Tauri 2](https://tauri.app) (Rust + TypeScript): جزیره یک پنجرهٔ شفاف و always-on-top است که هرگز focus را نمی‌دزدد، و Mochi در Canvas 2D با همان شکل‌ها، زمان‌بندی‌ها و صداهایی که روی مک هست رسم می‌شود.
-- هوک‌های Claude Code از یک `coucou-hook.exe` کوچک و یک named pipe می‌گذرند؛ کلیدها در Windows Credential Manager زندگی می‌کنند.
+- هوک‌های Claude Code از یک `coucou-hook.exe` کوچک و یک named pipe می‌گذرند و افزونهٔ Hermes از همین relay استفاده می‌کند؛ کلیدها در Windows Credential Manager زندگی می‌کنند.
 - جزئیات و تفاوت‌ها در [`windows/README.md`](windows/README.md).
 
 **Linux**

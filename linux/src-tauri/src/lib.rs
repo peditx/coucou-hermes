@@ -3,6 +3,7 @@
 mod claude;
 mod files;
 mod hermes;
+mod hermes_hooks;
 mod hooks;
 mod integrations;
 mod island;
@@ -209,6 +210,27 @@ fn hooks_apply(
     };
     let _ = app.emit("settings-changed", updated);
     Ok(backup)
+}
+
+// ── Hermes plugin ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn hermes_hooks_status() -> hermes_hooks::HermesHookStatus {
+    hermes_hooks::status()
+}
+
+/// Returns the diff the user has to look at before anything is written.
+#[tauri::command]
+fn hermes_hooks_preview(install: bool) -> Result<hermes_hooks::HermesHookPreview, String> {
+    hermes_hooks::preview(install)
+}
+
+/// Only ever called from an explicit click in the settings window. Unlike the
+/// Claude hooks this touches no app state — where the plugin stands is read
+/// straight from ~/.hermes every time.
+#[tauri::command]
+fn hermes_hooks_apply(install: bool, fingerprint: String) -> Result<String, String> {
+    hermes_hooks::write(install, &fingerprint)
 }
 
 #[tauri::command]
@@ -470,6 +492,9 @@ pub fn run() {
             hooks_status,
             hooks_preview,
             hooks_apply,
+            hermes_hooks_status,
+            hermes_hooks_preview,
+            hermes_hooks_apply,
             approval_decision,
             approval_ack,
             approval_decline,

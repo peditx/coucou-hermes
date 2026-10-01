@@ -125,7 +125,8 @@ npm run pack                # .deb + .rpm land in linux/release/
 
 | ماذا | لماذا | أين يذهب المفتاح |
 |---|---|---|
-| **خطافات Claude Code** | الجلسات المباشرة والموافقات (Claude Code + Hermes) | **Install hooks** — يُنشئ Coucou نسخة احتياطية من `~/.claude/settings.json`، ويدمج خطافاته ويعرض لك الفرق قبل الكتابة |
+| **خطافات Claude Code** | الجلسات المباشرة والموافقات (Claude Code) | **Install hooks** — يُنشئ Coucou نسخة احتياطية من `~/.claude/settings.json`، ويدمج خطافاته ويعرض لك الفرق قبل الكتابة |
+| **خطافات Hermes** | الجلسات المباشرة والموافقات لـ Hermes Agent | **Install plugin** — يُنشئ Coucou نسخة احتياطية من `~/.hermes/config.yaml`، ويضيف مفاتيحه الثلاثة ويعرض لك الفرق قبل الكتابة |
 | **مفتاح Anthropic API** | المحادثة والأسئلة عن الملفات | Keychain / Credential Manager / Secret Service |
 | **عنوان Hermes + المفتاح** *(اختياري)* | محادثة Hermes بملء الشاشة، ومحادثة الجزيرة إن اخترت Hermes محرّكاً لها؛ وللحصول على ملفات محلية من الوكيل البعيد، أضِف MCP من جانب Hermes | Keychain / Credential Manager / Secret Service |
 | Stripe وn8n وGitHub وVercel وResend وNotion وCal.com | حبّات التكامل (pills) | Keychain / Credential Manager / Secret Service، وكلها اختيارية |
@@ -150,7 +151,7 @@ npm run pack                # .deb + .rpm land in linux/release/
 
 - **الجزيرة**: `NSPanel` بلا إطار يحتضن الفتحة، يقوده آلة حالة صغيرة (`hidden → petit → home`).
 - **الشخصية**: تُرسم في SwiftUI عبر `Canvas` + `TimelineView` بمعدّل 60 إطاراً في الثانية — جسد squircle، وعينان مسقطتان على كرة، وحركة نابضة. لا Rive ولا Lottie ولا صور.
-- **Claude Code وHermes**: سكربت صغير `nb-hook` / `coucou-hook` يستقبل أحداث الخطاف ويرسلها عبر Unix socket (أنبوب مُسمّى على Windows) إلى التطبيق. وفي الموافقات ينتظر نقرتك ثم يردّ على الخطاف. يعمل مع المحرّكين معاً.
+- **Claude Code وHermes**: سكربت صغير `nb-hook` / `coucou-hook` يستقبل أحداث الخطاف ويرسلها عبر Unix socket (أنبوب مُسمّى على Windows) إلى التطبيق، وإضافة Hermes في `~/.hermes/plugins/coucou/` تغذّي نفس الـ relay. وفي الموافقات ينتظر نقرتك ثم يردّ على الخطاف. يعمل مع المحرّكين معاً.
 - **التكاملات**: مستطلعات خفيفة، تتوقّف حين لا يراقبها أحد.
 - **الأصوات**: 28 ملف WAV قصيراً تُشغَّل عبر `AVAudioPlayer`s محمّلة مسبقاً.
 
@@ -159,7 +160,7 @@ npm run pack                # .deb + .rpm land in linux/release/
 **Windows**
 
 - تطبيق [Tauri 2](https://tauri.app) (Rust + TypeScript): الجزيرة نافذة شفافة always-on-top لا تسرق التركيز أبداً، ويُرسم Mochi في Canvas 2D بالأشكال والتوقيتات والأصوات نفسها كما على Mac.
-- خطافات Claude Code تمرّ عبر `coucou-hook.exe` صغير وأنبوب مُسمّى؛ والمفاتيح تعيش في Windows Credential Manager.
+- خطافات Claude Code تمرّ عبر `coucou-hook.exe` صغير وأنبوب مُسمّى، وملحق Hermes يستخدم نفس الـ relay؛ والمفاتيح تعيش في Windows Credential Manager.
 - التفاصيل والفروقات في [`windows/README.md`](windows/README.md).
 
 **Linux**

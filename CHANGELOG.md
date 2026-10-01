@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hermes Agent — live sessions and approvals in the island on macOS, Windows and Linux: a plugin at `~/.hermes/plugins/coucou/` feeds the same relay Claude Code uses, installed from Settings with the same backup → diff → confirm flow
 - Linux app — the same Tauri build with X11/Wayland and `.deb`/`.rpm` packages
 - Hermes Agent — a full-screen chat window on macOS, Windows and Linux, plus an explicit choice of engine (Claude or Hermes) for the island chat with an explicit fallback; nothing switches on its own
 - Compact island on screens without a notch (#22) — thanks @Kamasoutra

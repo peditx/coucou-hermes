@@ -76,6 +76,19 @@ export const Bridge = {
   hooksApply: (install: boolean, fingerprint: string) =>
     callOrThrow<string>("hooks_apply", { install, fingerprint }),
 
+  // ── Hermes plugin ─────────────────────────────────────────────────────────
+  /** One plugin at ~/.hermes/plugins/coucou instead of shell hooks — same relay. */
+  hermesHooksStatus: () => call<HermesHookStatus>("hermes_hooks_status"),
+  /** Diff to show before anything is written. `install: false` previews removal. */
+  hermesHooksPreview: (install: boolean) =>
+    callOrThrow<HermesHookPreview>("hermes_hooks_preview", { install }),
+  /**
+   * Writes ~/.hermes/config.yaml and the plugin files — only ever after an
+   * explicit click, and only while the file still matches the reviewed diff.
+   */
+  hermesHooksApply: (install: boolean, fingerprint: string) =>
+    callOrThrow<string>("hermes_hooks_apply", { install, fingerprint }),
+
   approvalDecision: (requestId: string, decision: "allow" | "deny") =>
     call<void>("approval_decision", { requestId, decision }),
   /** "The card is up" — until this lands the relay only waits a moment. */
@@ -139,6 +152,23 @@ export interface HookPreview {
   backup: string;
   settingsPath: string;
   /** Hand back to hooksApply so only the reviewed diff is ever written. */
+  fingerprint: string;
+}
+
+export interface HermesHookStatus {
+  installed: boolean;
+  configPath: string;
+  pluginPath: string;
+  /** The relay is on disk — without it Hermes events have nowhere to go. */
+  hookReady: boolean;
+}
+
+export interface HermesHookPreview {
+  diff: string;
+  backup: string;
+  configPath: string;
+  pluginPath: string;
+  /** Hand back to hermesHooksApply so only the reviewed diff is ever written. */
   fingerprint: string;
 }
 

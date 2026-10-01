@@ -35,6 +35,11 @@ struct SettingsView: View {
     @State private var chatFallback: String = AppState.shared.chatFallback
     @State private var pendingHookJSON: String = ""
     @State private var hookNeedsUpdate: Bool = HookServer.hooksNeedUpdate()
+    @State private var hermesHooks: HermesHooks.Status = HermesHooks.status()
+    @State private var showHermesDiff: Bool = false
+    @State private var pendingHermesDiff: String = ""
+    @State private var pendingHermesFingerprint: String = ""
+    @State private var pendingHermesInstall: Bool = true
 
     // Integration keys
     @State private var resendKey: String    = KeychainStore.shared.get("resend-api-key")  ?? ""
@@ -242,6 +247,83 @@ struct SettingsView: View {
                     }
                     .padding(6)
                 }
+
+                // MARK: Hermes hooks
+                GroupBox("Hermes hooks") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Install the Coucou plugin so Hermes sessions show up in the island and their permission requests can be answered there. Your hooks in ~/.claude are untouched.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(hermesHooks.installed ? Color.green : Color.red)
+                                .frame(width: 8, height: 8)
+                            Text(hermesHooks.installed ? "Plugin installed" : "Not installed")
+                                .font(.system(size: 11))
+                        }
+
+                        Text("config.yaml : \(hermesHooks.configPath)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Text("plugin      : \(hermesHooks.pluginPath)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.secondary)
+
+                        if !hermesHooks.hookReady {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("The relay is not in place yet — restart Coucou.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.orange)
+                            }
+                        }
+
+                        #if APPSTORE
+                        Text("Not available in the App Store build: the sandbox cannot reach ~/.hermes.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                        #else
+                        HStack(spacing: 10) {
+                            Button(hermesHooks.installed ? "Reinstall plugin…" : "Install plugin…") {
+                                hermesPreview(install: true)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!hermesHooks.hookReady)
+                            if hermesHooks.installed {
+                                Button("Uninstall plugin…") { hermesPreview(install: false) }
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+
+                        if showHermesDiff {
+                            ScrollView {
+                                Text(pendingHermesDiff)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(height: 140)
+                            .background(Color(NSColor.textBackgroundColor))
+                            .cornerRadius(6)
+
+                            HStack {
+                                Button(pendingHermesInstall ? "Confirm & write" : "Confirm & remove") {
+                                    confirmHermes()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                Button("Cancel") {
+                                    showHermesDiff = false
+                                    pendingHermesDiff = ""
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        #endif
+                    }
+                    .padding(6)
+                }
+                .onAppear { hermesHooks = HermesHooks.status() }
 
                 // MARK: Integrations
                 GroupBox("Integrations") {
@@ -574,6 +656,36 @@ struct SettingsView: View {
             statusMessage = "❌ Write error: \(error.localizedDescription)"
         }
     }
+
+    #if !APPSTORE
+    private func hermesPreview(install: Bool) {
+        do {
+            let preview = try HermesHooks.preview(install: install)
+            pendingHermesDiff = preview.diff
+            pendingHermesFingerprint = preview.fingerprint
+            pendingHermesInstall = install
+            showHermesDiff = true
+            statusMessage = "Review the diff below before confirming."
+        } catch {
+            statusMessage = "❌ \(error.localizedDescription)"
+        }
+    }
+
+    private func confirmHermes() {
+        do {
+            let backup = try HermesHooks.write(install: pendingHermesInstall,
+                                               expected: pendingHermesFingerprint)
+            showHermesDiff = false
+            pendingHermesDiff = ""
+            hermesHooks = HermesHooks.status()
+            statusMessage = backup.isEmpty
+                ? "✓ Hermes plugin updated — start a new session to pick it up."
+                : "✓ Previous config saved as \(backup)."
+        } catch {
+            statusMessage = "❌ \(error.localizedDescription)"
+        }
+    }
+    #endif
 
     private func uninstallHooks() {
         do {

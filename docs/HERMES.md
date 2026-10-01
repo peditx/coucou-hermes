@@ -23,6 +23,15 @@ from the Hermes docs at plan time; re-read them before writing code. Sources:
 >   Code: `linux/src-tauri/src/hermes.rs`, `windows/src-tauri/src/hermes.rs`
 >   (identical), `NotchBuddy/Sources/App/HermesService.swift` +
 >   `ClaudeService.swift`.
+> - **Live Hermes sessions and approvals in the island.** A plugin at
+>   `~/.hermes/plugins/coucou/` forwards Hermes hook events to the same relay
+>   Claude Code already uses, and registers `coucou` as an approval transport,
+>   so Hermes permission requests arrive with Allow / Deny in the island.
+>   Installed from Settings → *Hermes hooks* with the same backup → diff →
+>   explicit click as the Claude hooks. See §6.
+>   Code: `hermes-plugin/`, `linux/src-tauri/src/hermes_hooks.rs`,
+>   `windows/src-tauri/src/hermes_hooks.rs` (identical),
+>   `NotchBuddy/Sources/App/HermesHooks.swift`.
 >
 > **Status — still plan:** the local-file bridge (§2–§3). Coucou does *not* yet
 > expose an MCP endpoint, so a remote Hermes still cannot read anything on this
@@ -186,3 +195,72 @@ Watch-outs: `DECISION_TIMEOUT` is 108 s while Hermes's approval timeout defaults
 300 s and fails closed — align them, or Coucou gives up first. And a remote endpoint
 is slow and flaky by nature, so the chat view must degrade to a visible
 "server unreachable" state instead of hanging.
+
+---
+
+## 6. Hermes hooks — shipped
+
+Hermes loads third-party plugins only when the name appears in `plugins.enabled`,
+and an approval transport only when `security.approval.transport` names it. Both
+are consent steps, so **both are written by the user clicking Install in
+Settings**, never by a background task. The installer touches exactly three
+keys and nothing else:
+
+```yaml
+plugins:
+  enabled:
+    - coucou
+
+security:
+  approval:
+    transport: coucou
+    transport_fallback: builtin   # default is `deny`
+```
+
+`transport_fallback: builtin` is not decoration. Hermes fails **closed**: a
+transport that errors, times out, is not registered, or answers with a stale
+request denies the approval outright, and `deny` is the default. The one-line
+opt-in is what makes a Coucou that isn't running fall back to Hermes' own
+prompt instead of silently denying — so Claude Code is never blocked, and
+Hermes is never blocked either.
+
+### What the plugin does
+
+- `~/.hermes/plugins/coucou/{plugin.yaml, __init__.py}` — one file that maps
+  Hermes hook events onto the Claude vocabulary the island already understands
+  (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`,
+  `SessionEnd`, `SubagentStart`, `SubagentStop`), so `hooks.ts` and the island
+  views need no Hermes-specific branch and no second integration card.
+- Every event goes out through the **existing relay** — `coucou-hook` on
+  Windows/Linux, `nb-hook` on macOS — as a single `subprocess.run`. The plugin
+  reuses the relay's timeouts, payload caps and "never block Claude Code"
+  rule instead of re-implementing them. If nothing is listening it writes
+  nothing and says nothing.
+- `present(request)` forwards the command and description as a
+  `PermissionRequest` and waits for your click. No answer, an unreadable
+  answer, or a refusal to answer raises — which `transport_fallback: builtin`
+  turns into Hermes' own prompt. There is no path where the plugin approves by
+  itself.
+
+### The installer
+
+`linux/src-tauri/src/hermes_hooks.rs` and `windows/src-tauri/src/hermes_hooks.rs`
+are identical, and `NotchBuddy/Sources/App/HermesHooks.swift` is the same logic
+in Swift. All three follow the Claude hooks discipline: read → dated backup →
+merge only our keys → unified diff → write only after an explicit click, and
+only while `config.yaml` still matches the bytes the diff was computed from.
+
+The YAML is edited **line by line and never round-tripped through a parser**:
+`config.yaml` carries comments, anchors and ordering that belong to the user
+and to Hermes, and a parse/serialise cycle would rewrite all of it. Uninstall
+removes `transport`, `transport_fallback`, our entry in `plugins.enabled`, and
+any mapping that our removal left empty — and nothing else. If you changed
+`transport` by hand, your value is left alone.
+
+The macOS app ships the plugin in its bundle (`hermes-plugin/`, a folder
+resource in `project.yml`) so install needs no network. The App Store build
+cannot reach `~/.hermes` from inside its sandbox, so the install buttons are
+absent there.
+
+*(Re-read the official plugin docs before changing any of this — the config
+keys and the fail-closed default are theirs, not ours.)*

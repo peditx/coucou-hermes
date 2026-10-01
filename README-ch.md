@@ -136,7 +136,8 @@ npm run pack                # .deb + .rpm land in linux/release/
 
 | 项目 | 用途 | 密钥存放在哪里 |
 |---|---|---|
-| **Claude Code hooks** | 实时会话与批准（Claude Code + Hermes） | **安装 hooks** —— Coucou 会备份 `~/.claude/settings.json`，合并它的 hooks，并在写入任何内容之前把差异给你看 |
+| **Claude Code hooks** | 实时会话与批准（Claude Code） | **安装 hooks** —— Coucou 会备份 `~/.claude/settings.json`，合并它的 hooks，并在写入任何内容之前把差异给你看 |
+| **Hermes hooks** | Hermes Agent 的实时会话与批准 | **安装 plugin** —— Coucou 会备份 `~/.hermes/config.yaml`，加入它的三个键，并在写入之前把差异给你看 |
 | **Anthropic API key** | 聊天，以及针对文件的提问 | Keychain / Credential Manager / Secret Service |
 | **Hermes URL + key** *（可选）* | 全屏 Hermes 聊天；如果你把 Hermes 选作小岛聊天的引擎，也包括小岛聊天；要让远程智能体访问本地文件，请在 Hermes 那一侧添加 MCP | Keychain / Credential Manager / Secret Service |
 | Stripe、n8n、GitHub、Vercel、Resend、Notion、Cal.com | 各个集成的胶囊按钮 | Keychain / Credential Manager / Secret Service，全部可选 |
@@ -161,7 +162,7 @@ npm run pack                # .deb + .rpm land in linux/release/
 
 - **小岛**：一个贴合刘海的无边框 `NSPanel`，由一台小型状态机驱动（`hidden → petit → home`）。
 - **角色**：用 SwiftUI `Canvas` + `TimelineView` 以 60 fps 绘制 —— squircle 身体、投射到球面上的眼睛、弹簧动画。没有 Rive，没有 Lottie，没有图片。
-- **Claude Code 与 Hermes**：一个小小的 `nb-hook` / `coucou-hook` 脚本接收 hook 事件，再通过 Unix socket（Windows 上是命名管道）转发给应用。遇到批准时它会等你点击，然后再回复 hook。两个引擎都支持。
+- **Claude Code 与 Hermes**：一个小小的 `nb-hook` / `coucou-hook` 脚本接收 hook 事件，再通过 Unix socket（Windows 上是命名管道）转发给应用，而 `~/.hermes/plugins/coucou/` 里的 Hermes 插件喂的也是同一条 relay。遇到批准时它会等你点击，然后再回复 hook。两个引擎都支持。
 - **集成**：轻量级轮询器，无人关注时暂停。
 - **音效**：28 个短 WAV，通过预加载的 `AVAudioPlayer` 播放。
 
@@ -170,7 +171,7 @@ macOS 应用是原生的 Swift 6 / SwiftUI / AppKit，**零第三方依赖**。
 **Windows**
 
 - 一个 [Tauri 2](https://tauri.app) 应用（Rust + TypeScript）：小岛是一个透明、置顶、从不抢焦点的窗口，Mochi 用 Canvas 2D 绘制，形状、时序和音效都与 Mac 版一致。
-- Claude Code hooks 经由一个小小的 `coucou-hook.exe` 和一条命名管道传递；密钥存在 Windows Credential Manager 中。
+- Claude Code hooks 经由一个小小的 `coucou-hook.exe` 和一条命名管道传递，Hermes 插件用的也是同一条 relay；密钥存在 Windows Credential Manager 中。
 - 细节与差异见 [`windows/README.md`](windows/README.md)。
 
 **Linux**

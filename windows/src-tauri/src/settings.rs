@@ -85,6 +85,13 @@ pub fn hook_exe_path() -> PathBuf {
     local_dir().join("bin").join("coucou-hook.exe")
 }
 
+/// %USERPROFILE% — where ~/.hermes lives.
+pub fn home() -> PathBuf {
+    std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 fn settings_path() -> PathBuf {
     config_dir().join("settings.json")
 }

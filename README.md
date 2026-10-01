@@ -136,7 +136,8 @@ Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows, Li
 
 | What | Why | Where the key goes |
 |---|---|---|
-| **Claude Code hooks** | live sessions & approvals (Claude Code + Hermes) | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
+| **Claude Code hooks** | live sessions & approvals for Claude Code | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
+| **Hermes hooks** | live sessions & approvals for Hermes Agent | **Install plugin** — Coucou backs up `~/.hermes/config.yaml`, adds its three keys and shows you the diff before writing anything |
 | **Anthropic API key** | chat and questions about files | Keychain / Credential Manager / Secret Service |
 | **Hermes URL + key** *(optional)* | the full-screen Hermes chat, and the island chat if you pick Hermes as its engine; for local files from the remote agent, add MCP on the Hermes side | Keychain / Credential Manager / Secret Service |
 | Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Credential Manager / Secret Service, all optional |
@@ -161,7 +162,7 @@ If Coucou isn't running, the hook exits immediately: **Claude Code is never bloc
 
 - **Island**: a borderless `NSPanel` hugging the notch, driven by a small state machine (`hidden → petit → home`).
 - **Character**: drawn in SwiftUI `Canvas` + `TimelineView` at 60 fps — squircle body, eyes projected on a sphere, spring animations. No Rive, no Lottie, no images.
-- **Claude Code & Hermes**: a tiny `nb-hook` / `coucou-hook` script receives hook events and forwards them over a Unix socket (named pipe on Windows) to the app. For approvals it waits for your click, then answers the hook. Works with both engines.
+- **Claude Code & Hermes**: a tiny `nb-hook` / `coucou-hook` script receives hook events and forwards them over a Unix socket (named pipe on Windows) to the app, and the Hermes plugin at `~/.hermes/plugins/coucou/` feeds that same relay. For approvals it waits for your click, then answers the hook. Works with both engines.
 - **Integrations**: lightweight pollers, paused when nothing is watching.
 - **Sounds**: 28 short WAVs played through preloaded `AVAudioPlayer`s.
 
@@ -170,7 +171,7 @@ The macOS app is native Swift 6 / SwiftUI / AppKit with **zero third-party depen
 **Windows**
 
 - A [Tauri 2](https://tauri.app) app (Rust + TypeScript): the island is a transparent, always-on-top window that never steals focus, Mochi is drawn in Canvas 2D with the same shapes, timings and sounds as on the Mac.
-- Claude Code hooks go through a tiny `coucou-hook.exe` and a named pipe; keys live in Windows Credential Manager.
+- Claude Code hooks go through a tiny `coucou-hook.exe` and a named pipe, and the Hermes plugin uses that same relay; keys live in Windows Credential Manager.
 - Details and differences in [`windows/README.md`](windows/README.md).
 
 **Linux**
