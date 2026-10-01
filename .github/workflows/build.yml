@@ -40,9 +40,12 @@ jobs:
       # open at all.
       - name: Package
         run: |
+          # The listing is the failure message: it says where xcodebuild put
+          # the bundle instead of making the next reader guess.
+          ls -la build/Build/Products/Release
           ditto -c -k --keepParent \
-            build/Build/Products/Release/NotchBuddy.app \
-            NotchBuddy-macOS.zip
+            build/Build/Products/Release/Coucou.app \
+            Coucou-macOS.zip
 
       # An unsigned build must never reach a release: the shipping app is
       # notarised locally with scripts/release.sh, and releases/latest is what
@@ -53,5 +56,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Coucou-macOS
-          path: NotchBuddy-macOS.zip
+          path: Coucou-macOS.zip
           retention-days: 3
