@@ -165,6 +165,24 @@ desktop — and an explicit `GDK_BACKEND` in your environment is never overridde
 Layer-shell support (true top-edge placement, no XWayland) is the upgrade path;
 GNOME still has no implementation of it.
 
+## Keyboard shortcut
+
+**Settings → General → Show island with shortcut** (off by default) registers a
+global key — `Ctrl+Shift+N` out of the box, changeable to any `Ctrl` / `Alt` /
+`Shift` / `Super` combination. Press it anywhere and the island opens.
+
+Who holds the key depends on the desktop, because a Wayland client may not ask
+for one itself:
+
+| Desktop | Who holds the key |
+|---|---|
+| GNOME (X11 and Wayland) | a custom keybinding in `org.gnome.settings-daemon.plugins.media-keys` — the registry GNOME Settings itself writes |
+| Everything else | nobody — use the tray |
+
+Turning it off removes exactly what Coucou added; your own custom keybindings
+are never touched. Either way it is logged to
+`~/.local/state/coucou/coucou.log`.
+
 ## What's different from the Mac version
 
 - No notch, so the island lives at the top centre of the screen and retracts into

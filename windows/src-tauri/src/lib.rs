@@ -5,6 +5,7 @@ mod files;
 mod hermes;
 mod hermes_hooks;
 mod hooks;
+mod hotkey;
 mod integrations;
 mod island;
 mod log;
@@ -66,12 +67,14 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
 
 #[tauri::command]
 fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
-    let (screen_changed, autostart_changed) = {
+    let (screen_changed, autostart_changed, hotkey_changed) = {
         let mut current = shared.settings.lock().unwrap();
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        let hotkey_changed = current.hotkey != settings.hotkey
+            || current.hotkey_enabled != settings.hotkey_enabled;
         *current = settings.clone();
-        (screen_changed, autostart_changed)
+        (screen_changed, autostart_changed, hotkey_changed)
     };
     if let Err(err) = settings::save(&settings) {
         eprintln!("[coucou] could not save settings: {err}");
@@ -86,6 +89,9 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     if screen_changed {
         let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
         island::apply_geometry(&app, &settings.screen, collapsed);
+    }
+    if hotkey_changed {
+        hotkey::update(&settings);
     }
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
@@ -556,6 +562,7 @@ pub fn run() {
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
             integrations::start(handle.clone());
+            hotkey::start(handle.clone(), &loaded);
             Ok(())
         })
         .run(tauri::generate_context!())

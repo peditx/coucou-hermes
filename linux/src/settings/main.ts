@@ -679,6 +679,16 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  const hotkey = h("input", {
+    type: "text", value: settings.hotkey, spellcheck: "false",
+    style: "width:120px",
+  }) as HTMLInputElement;
+  hotkey.addEventListener("change", () => {
+    settings.hotkey = hotkey.value.trim() || DEFAULT_SETTINGS.hotkey;
+    hotkey.value = settings.hotkey;
+    void save();
+  });
+
   return h(
     "section",
     {},
@@ -700,6 +710,12 @@ function generalSection(): HTMLElement {
     h("div", { class: "row" },
       h("label", { text: "Launch at startup" }),
       toggle(settings.autostart, (v) => { settings.autostart = v; void save(); }),
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Show island with shortcut" }),
+      toggle(settings.hotkeyEnabled, (v) => { settings.hotkeyEnabled = v; void save(); }),
+      hotkey,
+      h("span", { class: "hint", text: "Coucou holds these keys while on" }),
     ),
   );
 }

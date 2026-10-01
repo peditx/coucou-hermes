@@ -96,6 +96,10 @@ export interface Settings {
   chatEngine: "claude" | "hermes";
   /** Engine tried when the primary fails. "none" = surface the error where it happened. */
   chatFallback: "none" | "claude" | "hermes";
+  /** Global shortcut that reveals the island, written as "Ctrl+Shift+N". */
+  hotkey: string;
+  /** Whether the desktop is holding that shortcut for us. */
+  hotkeyEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -112,6 +116,8 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "claude-opus-5",
   chatEngine: "claude",
   chatFallback: "none",
+  hotkey: "Ctrl+Shift+N",
+  hotkeyEnabled: false,
 };
 
 type Listener = () => void;

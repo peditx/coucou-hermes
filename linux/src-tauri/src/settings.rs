@@ -28,6 +28,14 @@ pub struct Settings {
     /// "none" by default: no request is retried somewhere the user did not pick.
     #[serde(default = "default_chat_fallback")]
     pub chat_fallback: String,
+    /// Global shortcut that reveals the island, written as `Ctrl+Shift+N`.
+    /// Written into the desktop's own shortcut registry — see `hotkey.rs`.
+    #[serde(default = "default_hotkey")]
+    pub hotkey: String,
+    /// Whether the desktop is holding that shortcut for us.
+    /// Off by default: a global shortcut steals the keys from every other app.
+    #[serde(default)]
+    pub hotkey_enabled: bool,
 }
 
 fn default_model() -> String {
@@ -40,6 +48,10 @@ fn default_chat_engine() -> String {
 
 fn default_chat_fallback() -> String {
     "none".into()
+}
+
+fn default_hotkey() -> String {
+    "Ctrl+Shift+N".into()
 }
 
 impl Default for Settings {
@@ -61,6 +73,8 @@ impl Default for Settings {
             model: default_model(),
             chat_engine: default_chat_engine(),
             chat_fallback: default_chat_fallback(),
+            hotkey: default_hotkey(),
+            hotkey_enabled: false,
         }
     }
 }
