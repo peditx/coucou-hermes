@@ -1,135 +1,135 @@
-# Notch Buddy — intégrations
+# Notch Buddy — integrations
 
-Règle d'or : **vérifier la doc officielle au moment d'implémenter**. Les formats ci-dessous sont le plan, pas une garantie. Sources à relire :
-- Hooks Claude Code : https://code.claude.com/docs/en/hooks
-- API Claude (Messages, outil de recherche web, modèles) : https://docs.claude.com/en/api/overview
-- API publique n8n : `{URL de l'instance}/api/v1/docs` (playground de l'instance de Louis)
+Golden rule: **check the official docs when implementing**. The formats below are the plan, not a guarantee. Sources to re-read:
+- Claude Code hooks: https://code.claude.com/docs/en/hooks
+- Claude API (Messages, web search tool, models): https://docs.claude.com/en/api/overview
+- n8n public API: `{instance URL}/api/v1/docs` (playground of Louis's instance)
 
 ---
 
-## 1. Claude Code (sessions de Louis)
+## 1. Claude Code (Louis's sessions)
 
 ### Architecture
 ```
-claude (terminal, VS Code, app Claude)
-  └─ hook "command" ─► nb-hook (petit exécutable Swift, livré avec l'app)
-                         └─ socket Unix ─► Notch Buddy.app
-                         ◄─ décision (pour PermissionRequest)
+claude (terminal, VS Code, Claude app)
+  └─ "command" hook ─► nb-hook (small Swift executable, shipped with the app)
+                         └─ Unix socket ─► Notch Buddy.app
+                         ◄─ decision (for PermissionRequest)
 ```
-- `nb-hook` : cible séparée dans le projet, copiée dans `~/Library/Application Support/NotchBuddy/bin/nb-hook` au premier lancement.
-- Socket : `~/Library/Application Support/NotchBuddy/nb.sock` (version GitHub) ou `~/Library/Containers/fr.louisraille.Coucou/Data/nb.sock` (version App Store). Dossier en 0700, socket en 0600. Connexions du même utilisateur seulement (vérification `getpeereid`). 1 Mio et 5 s maximum par message, 32 connexions simultanées.
-- `nb-hook <Event>` lit le JSON du hook sur stdin, ajoute le contexte du terminal (`TERM_PROGRAM`, `ITERM_SESSION_ID`, `TERM_SESSION_ID`, `__CFBundleIdentifier`, le tty trouvé en remontant les processus parents, `cwd`), l'envoie à l'app.
-- **Si l'app ne répond pas en 300 ms, `nb-hook` sort en code 0 sans rien écrire** : Claude Code continue normalement. Jamais de blocage.
+- `nb-hook`: a separate target in the project, copied to `~/Library/Application Support/NotchBuddy/bin/nb-hook` on first launch.
+- Socket: `~/Library/Application Support/NotchBuddy/nb.sock` (GitHub version) or `~/Library/Containers/fr.louisraille.Coucou/Data/nb.sock` (App Store version). Directory in 0700, socket in 0600. Same-user connections only (verified with `getpeereid`). 1 MB and 5 s maximum per message, 32 simultaneous connections.
+- `nb-hook <Event>` reads the hook JSON on stdin, adds the terminal context (`TERM_PROGRAM`, `ITERM_SESSION_ID`, `TERM_SESSION_ID`, `__CFBundleIdentifier`, the tty found by walking up the parent processes, `cwd`), and sends it to the app.
+- **If the app does not answer within 300 ms, `nb-hook` exits with code 0 without writing anything**: Claude Code carries on as normal. Never blocks.
 
-### Événements à brancher et état du bonhomme
-| Hook | Effet dans l'app |
+### Events to wire up and character state
+| Hook | Effect in the app |
 |---|---|
-| `SessionStart` | crée la tâche (nom = dossier), état `idle` |
-| `UserPromptSubmit` | état `thinking`, ligne du défilé = début du prompt |
-| `PreToolUse` | état `working`, ligne = outil + cible (« Edit Invoice.swift », « Bash npm test ») |
-| `PostToolUse` / `PostToolUseFailure` | met à jour la ligne ; un échec reste `working` |
-| `PermissionRequest` | alerte `approval` (voir plus bas) |
-| `Notification` | selon le type : attente d'entrée → `question` si une question est posée, sinon rien ; limite d'usage → `ratelimit` |
-| `Stop` | état `finished` → vue `finished` 5,2 s, résumé = dernière phrase utile de la réponse si disponible |
-| `StopFailure` (si présent dans la doc) | alerte `error` |
-| `SubagentStart` / `SubagentStop` | afficher « + sous-agent » dans le défilé |
-| `SessionEnd` | retire la tâche |
+| `SessionStart` | creates the task (name = folder), state `idle` |
+| `UserPromptSubmit` | state `thinking`, ticker line = start of the prompt |
+| `PreToolUse` | state `working`, line = tool + target (« Edit Invoice.swift », « Bash npm test ») |
+| `PostToolUse` / `PostToolUseFailure` | updates the line; a failure stays `working` |
+| `PermissionRequest` | `approval` alert (see below) |
+| `Notification` | depending on the type: waiting for input → `question` if a question is being asked, otherwise nothing; usage limit → `ratelimit` |
+| `Stop` | state `finished` → `finished` view for 5.2 s, summary = last useful sentence of the response if available |
+| `StopFailure` (if present in the docs) | `error` alert |
+| `SubagentStart` / `SubagentStop` | show « + sub-agent » in the ticker |
+| `SessionEnd` | removes the task |
 
-Vérifier dans la doc la liste exacte des événements et leurs champs.
+Check the exact list of events and their fields in the docs.
 
-### Approuver depuis le notch
-- Sur `PermissionRequest`, `nb-hook` **attend** la décision de l'app (défaut 110 s, réglable) puis écrit sur stdout le JSON de décision du hook (d'après la doc actuelle : `hookSpecificOutput` avec `decision.behavior` = `allow` ou `deny`). Timeout du hook dans settings.json : décision + 10 s.
-- Pas de réponse avant le délai, ou app fermée → aucune sortie, le terminal affiche sa demande habituelle. Si Louis répond dans le terminal, l'app retire l'alerte au prochain événement de la session.
-- Un bug a été signalé où `deny` était ignoré sur `PermissionRequest` (issue GitHub anthropics/claude-code #19298). **Tester allow et deny** ; si deny ne marche pas, basculer la décision sur `PreToolUse` (`permissionDecision`) pour les outils concernés.
-- « Toujours autoriser » : si la doc permet de renvoyer une règle de permission persistante, l'utiliser. Sinon l'app garde sa propre liste (projet + outil + motif de commande) et répond `allow` automatiquement ensuite. Liste visible et supprimable dans les réglages.
-- Raccourcis Y / N quand la vue `approval` est ouverte.
+### Approving from the notch
+- On `PermissionRequest`, `nb-hook` **waits** for the app's decision (110 s default, configurable) then writes the hook's decision JSON to stdout (per the current docs: `hookSpecificOutput` with `decision.behavior` = `allow` or `deny`). Hook timeout in settings.json: decision + 10 s.
+- No answer before the deadline, or app closed → no output at all, the terminal shows its usual prompt. If Louis answers in the terminal, the app drops the alert on the next session event.
+- A bug has been reported where `deny` was ignored on `PermissionRequest` (GitHub issue anthropics/claude-code #19298). **Test both allow and deny**; if deny does not work, move the decision to `PreToolUse` (`permissionDecision`) for the tools involved.
+- « Always allow »: if the docs let us return a persistent permission rule, use it. Otherwise the app keeps its own list (project + tool + command pattern) and answers `allow` automatically afterwards. The list is visible and deletable in Settings.
+- Y / N shortcuts while the `approval` view is open.
 
-### Répondre aux questions
-- Si Claude utilise l'outil de question (`AskUserQuestion`), l'intercepter en `PreToolUse` et afficher les options dans la vue `question`.
-- Vérifier dans la doc si un hook peut fournir la réponse. Si oui : clic sur une option = réponse. **Si non** : la vue affiche la question et un bouton « Répondre dans le terminal » qui saute à la session. Ne pas bricoler de frappe clavier simulée.
+### Answering questions
+- If Claude uses the question tool (`AskUserQuestion`), intercept it in `PreToolUse` and show the options in the `question` view.
+- Check in the docs whether a hook can supply the answer. If so: clicking an option = the answer. **If not**: the view shows the question and a « Answer in the terminal » button that jumps to the session. Do not hack simulated keyboard typing.
 
-### Sauter au terminal
-| Contexte capté | Action |
+### Jumping to the terminal
+| Captured context | Action |
 |---|---|
-| `TERM_PROGRAM=Apple_Terminal` + tty | AppleScript Terminal : sélectionner l'onglet dont le `tty` correspond, activer |
-| `TERM_PROGRAM=iTerm.app` + `ITERM_SESSION_ID` | AppleScript iTerm : sélectionner la session, activer |
-| `TERM_PROGRAM=vscode` | ouvrir le dossier `cwd` dans VS Code ou Cursor (selon `__CFBundleIdentifier`) |
-| Ghostty, Warp, autre | activer l'app |
-| rien (app Claude) | activer l'app Claude |
-Demande l'autorisation Automatisation la première fois (normal).
+| `TERM_PROGRAM=Apple_Terminal` + tty | Terminal AppleScript: select the tab whose `tty` matches, activate |
+| `TERM_PROGRAM=iTerm.app` + `ITERM_SESSION_ID` | iTerm AppleScript: select the session, activate |
+| `TERM_PROGRAM=vscode` | open the `cwd` folder in VS Code or Cursor (depending on `__CFBundleIdentifier`) |
+| Ghostty, Warp, other | activate the app |
+| nothing (Claude app) | activate the Claude app |
+Requests Automation permission the first time (normal).
 
-### Installation des hooks : procédure obligatoire
-1. Lire `~/.claude/settings.json` (le créer s'il n'existe pas).
-2. Copier en `~/.claude/settings.json.bak-AAAAMMJJ-HHMM`.
-3. **Fusionner** : ajouter les hooks Notch Buddy sans toucher aux hooks existants. Chemin de `nb-hook` entre guillemets (il contient un espace).
-4. Montrer le diff à Louis, attendre son OK, écrire.
-5. Bouton « Désinstaller les hooks » dans les réglages qui retire uniquement les entrées Notch Buddy.
-
----
-
-## 2. n8n (workflows de Louis)
-
-- Réglages : URL de l'instance (probablement `https://n8nlouis.dcsys.tech`, **à confirmer avec Louis**) et clé API n8n (Trousseau). La clé se crée dans n8n : Settings → n8n API.
-- Le Mac joint n8n, pas l'inverse : **polling** toutes les 5 s de l'API publique :
-  - noms des workflows : `GET /api/v1/workflows` (cache 10 min) ;
-  - exécutions récentes : `GET /api/v1/executions` avec filtres de statut et `limit`.
-- Mapping :
-  - exécution en cours → tâche `working` (si l'API expose les exécutions en cours ; sinon n8n n'apparaît qu'aux erreurs et aux succès, c'est acceptable) ;
-  - nouvelle exécution en erreur → alerte `error`, détail = nœud en échec + message (`GET /api/v1/executions/{id}?includeData=true`) ;
-  - succès → mini-bonhomme `finished` 3 s en compact, **sans** ouvrir l'island (sinon trop de bruit), sauf réglage contraire.
-- Boutons :
-  - « Relancer » → endpoint de retry de l'API publique (vérifier sa présence et son chemin dans le playground de l'instance). S'il n'existe pas : ouvrir l'exécution dans n8n.
-  - « Ouvrir dans n8n » → ouvrir `{URL}/workflow/{workflowId}/executions/{executionId}` dans le navigateur par défaut.
-- Réglage « workflows suivis » : tous par défaut, liste à cocher.
+### Installing the hooks: mandatory procedure
+1. Read `~/.claude/settings.json` (create it if it does not exist).
+2. Copy it to `~/.claude/settings.json.bak-AAAAMMJJ-HHMM`.
+3. **Merge**: add the Notch Buddy hooks without touching the existing ones. The `nb-hook` path is quoted (it contains a space).
+4. Show the diff to Louis, wait for his OK, write.
+5. An « Uninstall the hooks » button in Settings that removes only the Notch Buddy entries.
 
 ---
 
-## 3. Fichiers déposés
+## 2. n8n (Louis's workflows)
 
-- Glisser-déposer natif sur la panel (types `fileURL`). Copier les fichiers dans `~/Library/Application Support/NotchBuddy/inbox/` (c'est la phase `uploading`).
-- Vue `choose` :
-  - **Poser une question dessus** → vue `prompt` avec une pastille du fichier. Envoi à l'API Claude (§5) : PDF en bloc `document`, images en bloc `image`, texte et code (≤ 200 Ko) en texte. Autres types : message « Je ne sais pas lire ce format, mais je peux l'envoyer par mail. »
-  - **Envoyer par mail** → vue `mail` (§6).
-- Nettoyer l'inbox après 7 jours.
-
----
-
-## 4. Attacher le bonhomme à une fenêtre
-
-1. Au lâcher, trouver la fenêtre sous le point : `CGWindowListCopyWindowInfo(.optionOnScreenOnly)`, première fenêtre de couche 0 qui n'est pas la nôtre et contient le point. Récupérer app, titre, cadre.
-2. Afficher le **halo** : une panel transparente, non cliquable, posée sur le cadre de la fenêtre. Bordure conique arc-en-ciel de 3 pt qui tourne en 3 s (`#FF6B5B → #F7B32B → #2DD4A7 → #38BDF8 → #A78BFA → #F472B6`), voile multicolore en mode multiply qui respire (voir `.attach` du prototype), fondu d'entrée 600 ms. Son `attach`, émote Clin d'œil.
-3. Contexte envoyé à Claude :
-   - capture de la fenêtre avec ScreenCaptureKit (`SCScreenshotManager`), redimensionnée à 1568 px de large max ;
-   - si c'est Safari, Chrome, Arc ou Brave : URL et titre de l'onglet actif via AppleScript.
-4. Vue `prompt` avec la pastille « Safari, escale.fr » (app + domaine), focus sur le champ.
-5. Le halo reste pendant `searching`, disparaît quand le résultat s'affiche ou quand l'island se ferme.
-
-Permissions : Enregistrement de l'écran (capture) et Automatisation (navigateur). Si refusées : on continue sans capture ou sans URL, et on le dit en une ligne dans la vue.
+- Settings: instance URL (probably `https://n8nlouis.dcsys.tech`, **to confirm with Louis**) and n8n API key (Keychain). The key is created in n8n: Settings → n8n API.
+- The Mac polls n8n, not the other way round: **poll** the public API every 5 s:
+  - workflow names: `GET /api/v1/workflows` (10 min cache);
+  - recent executions: `GET /api/v1/executions` with status filters and `limit`.
+- Mapping:
+  - running execution → `working` task (if the API exposes running executions; otherwise n8n only shows up on errors and successes, which is acceptable);
+  - new failed execution → `error` alert, detail = failing node + message (`GET /api/v1/executions/{id}?includeData=true`);
+  - success → mini-character `finished` for 3 s in compact, **without** opening the island (otherwise too much noise), unless a setting says otherwise.
+- Buttons:
+  - « Retry » → the public API's retry endpoint (check that it exists and its path in the instance playground). If it does not: open the execution in n8n.
+  - « Open in n8n » → open `{URL}/workflow/{workflowId}/executions/{executionId}` in the default browser.
+- « Tracked workflows » setting: all by default, a checklist.
 
 ---
 
-## 5. API Claude (recherche)
+## 3. Dropped files
 
-- `POST https://api.anthropic.com/v1/messages`, en-têtes `x-api-key`, `anthropic-version`, `content-type: application/json` (versions à vérifier dans la doc).
-- Modèle par défaut : `claude-sonnet-5`, réglable dans les réglages. Vérifier la liste des modèles disponibles dans la doc.
-- Outil de recherche web côté serveur de l'API : l'identifiant de type à jour est dans la doc (au moment d'écrire, `web_search_20250305`) ; `max_uses` 5.
-- Prompt système (français) : répondre court, pour un affichage dans le notch, au format JSON strict :
+- Native drag and drop onto the panel (types `fileURL`). Copy the files into `~/Library/Application Support/NotchBuddy/inbox/` (that is the `uploading` phase).
+- `choose` view:
+  - **Ask a question about it** → `prompt` view with a file pill. Sent to the Claude API (§5): PDF as a `document` block, images as an `image` block, text and code (≤ 200 KB) as text. Other types: message « I can't read this format, but I can email it. »
+  - **Send by email** → `mail` view (§6).
+- Clean the inbox after 7 days.
+
+---
+
+## 4. Attaching the character to a window
+
+1. On drop, find the window under the point: `CGWindowListCopyWindowInfo(.optionOnScreenOnly)`, first layer-0 window that is not ours and contains the point. Get the app, title, frame.
+2. Show the **halo**: a transparent, non-clickable panel laid over the window frame. A 3 pt conic rainbow border that rotates in 3 s (`#FF6B5B → #F7B32B → #2DD4A7 → #38BDF8 → #A78BFA → #F472B6`), a multicolour veil in multiply mode that breathes (see `.attach` in the prototype), 600 ms fade-in. `attach` sound, Wink emote.
+3. Context sent to Claude:
+   - capture the window with ScreenCaptureKit (`SCScreenshotManager`), resized to a max width of 1568 px;
+   - if it is Safari, Chrome, Arc or Brave: the active tab's URL and title via AppleScript.
+4. `prompt` view with the « Safari, escale.fr » pill (app + domain), focus on the field.
+5. The halo stays during `searching`, disappears when the result shows or when the island closes.
+
+Permissions: Screen Recording (capture) and Automation (browser). If denied: carry on without the capture or without the URL, and say so in one line in the view.
+
+---
+
+## 5. Claude API (search)
+
+- `POST https://api.anthropic.com/v1/messages`, headers `x-api-key`, `anthropic-version`, `content-type: application/json` (versions to check in the docs).
+- Default model: `claude-sonnet-5`, configurable in Settings. Check the list of available models in the docs.
+- Server-side web search tool on the API: the up-to-date type id is in the docs (as of writing, `web_search_20250305`); `max_uses` 5.
+- System prompt (English, for the notch UI): answer briefly, for display in the notch, in strict JSON format:
   ```json
   { "title": "…", "items": [ { "label": "…", "detail": "…", "url": "…" } ], "note": "…" }
   ```
-  3 items maximum. Si le JSON est invalide : afficher le texte brut (3 lignes max) dans la vue `result`.
-- Contenu du message utilisateur : capture (bloc image) + « URL : … / Titre : … / Demande : … », ou fichier (§3) + demande, ou demande seule (onglet Demander).
-- Pendant l'appel : état `searching`, vue `searching`, texte scintillant. Réponse : état `finished`, vue `result`, émote Fier, son `finish`.
-- Boutons du résultat : « Ouvrir » (premier lien, seulement s'il est en http ou https ; sinon le bouton est grisé), « Copier » (texte), « Fermer ».
-- Erreur réseau ou clé invalide : état `error`, vue `note` avec la raison en une phrase et « Ouvre les réglages pour vérifier la clé ».
-- Micro (bouton du champ) : dictée `SFSpeechRecognizer` en `fr-FR`, sur l'appareil si possible. Optionnel (M9). Si la permission est refusée, masquer le bouton.
+  Maximum 3 items. If the JSON is invalid: show the raw text (max 3 lines) in the `result` view.
+- User message content: capture (image block) + « URL: … / Title: … / Request: … », or file (§3) + request, or request alone (Ask tab).
+- During the call: state `searching`, `searching` view, shimmering text. Response: state `finished`, `result` view, Proud emote, `finish` sound.
+- Result buttons: « Open » (first link, only if it is http or https; otherwise the button is disabled), « Copy » (text), « Close ».
+- Network error or invalid key: state `error`, `note` view with the reason in one sentence and « Open Settings to check the key ».
+- Microphone (field button): `SFSpeechRecognizer` dictation in `en-US`, on-device if possible. Optional (M9). If the permission is denied, hide the button.
 
 ---
 
-## 6. Mail (app Mail du Mac)
+## 6. Mail (the Mac's Mail app)
 
-- Vue `mail` : À (obligatoire, validation d'adresse), Objet (prérempli : nom du fichier), Message (optionnel, une ligne).
-- Envoi uniquement au clic sur « Envoyer », via AppleScript (`NSAppleScript`) sur Mail :
+- `mail` view: To (required, address validation), Subject (pre-filled: the file name), Message (optional, one line).
+- Sending only on clicking « Send », via AppleScript (`NSAppleScript`) on Mail:
   ```applescript
   tell application "Mail"
     set m to make new outgoing message with properties {subject:"…", content:"…", visible:false}
@@ -141,18 +141,18 @@ Permissions : Enregistrement de l'écran (capture) et Automatisation (navigateur
     send m
   end tell
   ```
-  Le `delay` laisse le temps à la pièce jointe d'être prise en compte (comportement connu de Mail). `Info.plist` : `NSAppleEventsUsageDescription`.
-- Succès : vue `note` « Mail envoyé à … », émote Clin d'œil, son `send`. Échec : état `error` avec la raison.
+  The `delay` gives Mail time to pick the attachment up (known Mail behaviour). `Info.plist`: `NSAppleEventsUsageDescription`.
+- Success: `note` view « Mail sent to … », Wink emote, `send` sound. Failure: `error` state with the reason.
 
 ---
 
-## 7. Permissions macOS demandées (récapitulatif pour Louis)
+## 7. macOS permissions requested (recap for Louis)
 
-| Permission | Pourquoi | Quand |
+| Permission | Why | When |
 |---|---|---|
-| Automatisation → Mail | envoyer les mails | premier envoi |
-| Automatisation → Terminal / iTerm / navigateur | sauter au bon onglet, lire l'URL | première utilisation |
-| Enregistrement de l'écran | capturer la fenêtre attrapée | première attache |
-| Micro + Reconnaissance vocale (optionnel) | dictée | premier clic sur le micro |
+| Automation → Mail | send emails | first send |
+| Automation → Terminal / iTerm / browser | jump to the right tab, read the URL | first use |
+| Screen Recording | capture the attached window | first attach |
+| Microphone + Speech Recognition (optional) | dictation | first click on the mic |
 
-Aucune permission Accessibilité nécessaire.
+No Accessibility permission needed.

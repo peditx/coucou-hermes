@@ -69,6 +69,8 @@ final class KeychainStore: @unchecked Sendable {
         "stripe-api-key",
         "calcom-api-key",
         "notion-api-key",
+        // Hermes Agent (remote): API-server base URL and bearer key.
+        "hermes-url", "hermes-token",
     ]
 
     private init() {
@@ -132,16 +134,85 @@ final class ClaudeService {
 
     // MARK: - Chat (multi-turn, natural text + web search)
 
+    /// One island turn. Which engine answers — and which one catches a failure
+    /// — is the user's choice; nothing switches on its own.
     func chat(query: String, context: PromptContext?, state: AppState) async {
-        guard let key = apiKey, !key.isEmpty else {
-            await showError("API key missing. Open settings.", state: state)
+        let primary = AppState.shared.chatEngine
+        guard let failure = await turn(primary, query: query, context: context, state: state) else {
             return
         }
 
-        // Build user content for this turn
-        var userContent: [[String: Any]] = []
+        let fallback = AppState.shared.chatFallback
+        if fallback != "none", fallback != primary {
+            // Only ever the fallback the user picked. Its own error is dropped:
+            // the primary's message is the root cause of why this ran twice.
+            _ = await turn(fallback, query: query, context: context, state: state)
+        }
+        await showError(failure, state: state)
+    }
 
-        // Add file/window context on first message only
+    private func turn(
+        _ engine: String,
+        query: String,
+        context: PromptContext?,
+        state: AppState
+    ) async -> String? {
+        if engine == "hermes" {
+            return await hermesTurn(query: query, context: context, state: state)
+        }
+        return await claudeTurn(query: query, context: context, state: state)
+    }
+
+    /// Returns nil on success, or the reason the island should show. Neither
+    /// engine touches `state` on failure — the caller decides what to do next.
+    private func claudeTurn(query: String, context: PromptContext?, state: AppState) async -> String? {
+        guard let key = apiKey, !key.isEmpty else {
+            return "API key missing. Open settings."
+        }
+
+        conversationMessages.append(["role": "user", "content": turnContent(query: query, context: context)])
+
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 4096,
+            "tools": webSearchTools,
+            "system": systemPrompt,
+            "messages": conversationMessages,
+        ]
+
+        do {
+            let data = try await callAPI(body: body, key: key, beta: "web-search-2025-03-05")
+            return await handleChatResult(data, state: state)
+        } catch {
+            conversationMessages.removeLast()
+            return "Network error: \(error.localizedDescription)"
+        }
+    }
+
+    /// The remote agent runs its own tools, so nothing is passed but the same
+    /// prompt, the same history and the same file/window context Claude gets.
+    private func hermesTurn(query: String, context: PromptContext?, state: AppState) async -> String? {
+        guard HermesAPI.configured else {
+            return HermesError.notConfigured.errorDescription
+        }
+
+        conversationMessages.append(["role": "user", "content": turnContent(query: query, context: context)])
+
+        do {
+            let reply = try await HermesAPI.send(messages: hermesMessages(), onDelta: { _ in })
+            conversationMessages.append(["role": "assistant", "content": [["type": "text", "text": reply]]])
+            accept(reply, state: state)
+            return nil
+        } catch {
+            conversationMessages.removeLast()
+            return (error as? HermesError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// File / window context rides along with the first message only, exactly
+    /// as both engines expect it.
+    private func turnContent(query: String, context: PromptContext?) -> [[String: Any]] {
+        var userContent: [[String: Any]] = []
         if conversationMessages.isEmpty, let context = context {
             switch context {
             case .window(let app, let title, let url):
@@ -156,24 +227,71 @@ final class ClaudeService {
             }
         }
         userContent.append(["type": "text", "text": query])
+        return userContent
+    }
 
-        conversationMessages.append(["role": "user", "content": userContent])
+    /// Both engines land a reply the same way: into the history, out to the
+    /// island, and Mochi looks pleased about it.
+    private func accept(_ text: String, state: AppState) {
+        state.chatHistory.append(ChatMessage(role: .assistant, content: text.trimmingCharacters(in: .whitespacesAndNewlines)))
+        state.stateOverride = nil
+        state.view = .prompt
+        NotificationCenter.default.post(name: .triggerEmote, object: BotEmote.happy)
+    }
 
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": 4096,
-            "tools": webSearchTools,
-            "system": systemPrompt,
-            "messages": conversationMessages,
-        ]
-
-        do {
-            let data = try await callAPI(body: body, key: key, beta: "web-search-2025-03-05")
-            await handleChatResult(data, state: state)
-        } catch {
-            conversationMessages.removeLast()
-            await showError("Network error: \(error.localizedDescription)", state: state)
+    /// Stored Anthropic blocks → OpenAI messages, so a fallback can switch
+    /// engines without either one having to re-read the history.
+    private func hermesMessages() -> [[String: Any]] {
+        var out: [[String: Any]] = [["role": "system", "content": systemPrompt]]
+        for message in conversationMessages {
+            out.append([
+                "role": message["role"] as? String ?? "user",
+                "content": openAIParts(message["content"]),
+            ])
         }
+        return out
+    }
+
+    private func openAIParts(_ content: Any?) -> [[String: Any]] {
+        if let text = content as? String { return [["type": "text", "text": text]] }
+        guard let blocks = content as? [[String: Any]] else { return [] }
+        return blocks.map(openAIPart)
+    }
+
+    /// One stored block → one OpenAI part. Text goes across as text; images and
+    /// PDFs are inlined, because a remote agent cannot open a path on this Mac.
+    private func openAIPart(_ block: [String: Any]) -> [String: Any] {
+        switch block["type"] as? String {
+        case "image", "document":
+            guard let source = block["source"] as? [String: Any],
+                  let media = source["media_type"] as? String,
+                  let data = source["data"] as? String else {
+                return ["type": "text", "text": ""]
+            }
+            let url = "data:\(media);base64,\(data)"
+            if block["type"] as? String == "image" {
+                return ["type": "image_url", "image_url": ["url": url]]
+            }
+            // OpenAI's file part. Unverified against Hermes' server: if it
+            // rejects the block the turn fails loudly instead of silently.
+            return ["type": "file", "file": ["filename": "attachment", "file_data": url]]
+        case "tool_use":
+            let name = block["name"] as? String ?? "?"
+            return ["type": "text", "text": "Tool call \(name): \(block["input"] ?? "")"]
+        case "tool_result":
+            return ["type": "text", "text": toolText(block["content"])]
+        default:
+            return ["type": "text", "text": block["text"] as? String ?? ""]
+        }
+    }
+
+    /// tool_result content is a string, or a list of blocks.
+    private func toolText(_ content: Any?) -> String {
+        if let text = content as? String { return text }
+        if let items = content as? [[String: Any]] {
+            return items.map { $0["text"] as? String ?? "" }.joined(separator: "\n")
+        }
+        return ""
     }
 
     // MARK: - Structured search (M8 — window attach + web search)
@@ -250,28 +368,26 @@ final class ClaudeService {
 
     // MARK: - Chat result handler
 
-    private func handleChatResult(_ data: Data, state: AppState) async {
+    /// Returns nil on success, or the reason to show. A failed turn is taken
+    /// back out of the history so the fallback — or the next message — never
+    /// sees a question the model did not answer.
+    private func handleChatResult(_ data: Data, state: AppState) async -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let content = json["content"] as? [[String: Any]] else {
-            await showError("Unexpected API response.", state: state)
-            return
+            conversationMessages.removeLast()
+            return "Unexpected API response."
+        }
+
+        guard let textBlock = content.first(where: { $0["type"] as? String == "text" }),
+              let text = textBlock["text"] as? String, !text.isEmpty else {
+            conversationMessages.removeLast()
+            return "No response text."
         }
 
         // Store full content (includes tool_use/tool_result blocks) for correct multi-turn context
         conversationMessages.append(["role": "assistant", "content": content])
-
-        guard let textBlock = content.first(where: { $0["type"] as? String == "text" }),
-              let text = textBlock["text"] as? String, !text.isEmpty else {
-            await showError("No response text.", state: state)
-            return
-        }
-
-        // Add to display history
-        state.chatHistory.append(ChatMessage(role: .assistant, content: text.trimmingCharacters(in: .whitespacesAndNewlines)))
-
-        state.stateOverride = nil
-        state.view = .prompt
-        NotificationCenter.default.post(name: .triggerEmote, object: BotEmote.happy)
+        accept(text, state: state)
+        return nil
     }
 
     // MARK: - Structured result handler

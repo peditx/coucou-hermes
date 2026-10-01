@@ -8,6 +8,10 @@ struct SettingsView: View {
     @State private var launchAtStartup: Bool = (SMAppService.mainApp.status == .enabled)
     @State private var statusMessage: String = ""
     @State private var showDiff: Bool = false
+    @State private var hermesUrl: String = KeychainStore.shared.get("hermes-url")   ?? ""
+    @State private var hermesKey: String = KeychainStore.shared.get("hermes-token") ?? ""
+    @State private var chatEngine: String = AppState.shared.chatEngine
+    @State private var chatFallback: String = AppState.shared.chatFallback
     @State private var pendingHookJSON: String = ""
     @State private var hookNeedsUpdate: Bool = HookServer.hooksNeedUpdate()
 
@@ -56,6 +60,64 @@ struct SettingsView: View {
                             statusMessage = "✓ Key saved."
                         }
                         .buttonStyle(.borderedProminent)
+                    }
+                    .padding(6)
+                }
+
+                // MARK: Hermes
+                GroupBox("Hermes Agent") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Server URL  (https://agent.example:8642)", text: $hermesUrl)
+                            .textFieldStyle(.roundedBorder)
+                        SecureField("API_SERVER_KEY", text: $hermesKey)
+                            .textFieldStyle(.roundedBorder)
+                        HStack(spacing: 10) {
+                            Button("Save") {
+                                saveKey("hermes-url",   value: hermesUrl)
+                                saveKey("hermes-token", value: hermesKey)
+                                statusMessage = HermesChatModel.configured
+                                    ? "✓ Hermes saved."
+                                    : "❌ Hermes needs both a URL and a key."
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button("Open chat") {
+                                NotificationCenter.default.post(name: .openHermesChat, object: nil)
+                            }
+                        }
+                        Text("Then on the agent side: ~/.hermes/config.yaml → mcp_servers, and /reload-mcp.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(6)
+                }
+
+                // MARK: Island chat engine
+                GroupBox("Island chat") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Text("Engine").frame(width: 70, alignment: .leading)
+                            Picker("", selection: $chatEngine) {
+                                Text("Claude — Anthropic API").tag("claude")
+                                Text("Hermes — remote agent").tag("hermes")
+                            }
+                            .labelsHidden()
+                            .onChange(of: chatEngine) { _, v in AppState.shared.chatEngine = v }
+                        }
+
+                        HStack(spacing: 8) {
+                            Text("If it fails").frame(width: 70, alignment: .leading)
+                            Picker("", selection: $chatFallback) {
+                                Text("No fallback").tag("none")
+                                Text("Claude").tag("claude")
+                                Text("Hermes").tag("hermes")
+                            }
+                            .labelsHidden()
+                            .onChange(of: chatFallback) { _, v in AppState.shared.chatFallback = v }
+                        }
+
+                        Text("Nothing switches on its own — only the engine above is used, and only the fallback above is ever tried after it.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
                     }
                     .padding(6)
                 }

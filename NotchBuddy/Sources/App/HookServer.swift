@@ -199,7 +199,7 @@ final class HookServer: @unchecked Sendable {
             state.updateTask(id: "integration_claude", state: .working)
             let tool = payload["tool_name"] as? String ?? "Tool"
             let input = payload["tool_input"] as? [String: Any] ?? [:]
-            let step = frenchStep(tool: tool, input: input)
+            let step = stepLabel(tool: tool, input: input)
             appendStep(id: "integration_claude", step: step)
             nbLog("PreToolUse \(tool)")
 
@@ -428,22 +428,22 @@ final class HookServer: @unchecked Sendable {
         return aliases[name.lowercased()] ?? name
     }
 
-    // MARK: - French step labels
+    // MARK: - Step labels
 
-    private func frenchStep(tool: String, input: [String: Any]) -> String {
+    private func stepLabel(tool: String, input: [String: Any]) -> String {
         let labels: [String: String] = [
-            "Bash":       "Exécute",
-            "Read":       "Lit",
-            "Write":      "Écrit",
-            "Edit":       "Modifie",
-            "Glob":       "Cherche",
-            "Grep":       "Recherche",
-            "WebSearch":  "Recherche web",
-            "WebFetch":   "Récupère",
-            "TodoWrite":  "Tâches",
+            "Bash":       "Runs",
+            "Read":       "Reads",
+            "Write":      "Writes",
+            "Edit":       "Edits",
+            "Glob":       "Finds",
+            "Grep":       "Searches",
+            "WebSearch":  "Web search",
+            "WebFetch":   "Fetches",
+            "TodoWrite":  "Tasks",
             "Task":       "Agent",
-            "LS":         "Liste",
-            "MultiEdit":  "Modifie",
+            "LS":         "Lists",
+            "MultiEdit":  "Edits",
             "NotebookEdit": "Notebook",
         ]
         let label = labels[tool] ?? tool

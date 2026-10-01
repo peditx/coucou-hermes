@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Open Coucou", action: #selector(openIsland), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: "Hermes Chat", action: #selector(openHermes), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
@@ -67,6 +68,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private var hermesWindow: NSWindow?
+
+    @objc private func openHermes() {
+        // The island floats above every window; fold it away so it can't cover the chat.
+        if AppState.shared.mode == .expanded { islandController?.collapse() }
+
+        if let w = hermesWindow {
+            w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return
+        }
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 780),
+                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                           backing: .buffered, defer: false)
+        win.title = "Hermes — Coucou"
+        let host = NSHostingView(rootView: HermesChatView())
+        host.sizingOptions = [.minSize]
+        win.contentView = host
+        win.contentMinSize = NSSize(width: 720, height: 520)
+        win.isReleasedWhenClosed = false
+        // Maximised to the visible frame rather than exclusive full screen: the
+        // user can still grab the title bar and tile it like any other window.
+        let screen = IslandWindowController.notchScreen() ?? NSScreen.main
+        if let screen { win.setFrame(screen.visibleFrame, display: true) } else { win.center() }
+        hermesWindow = win
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     /// Centres the window horizontally and keeps its title bar clear of the island panel
     /// (320 pt tall at the top of the notch screen), shrinking it to fit if needed.
     private func placeBelowIsland(_ win: NSWindow) {
@@ -98,5 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotionPoller.shared.start()
         NotificationCenter.default.addObserver(self, selector: #selector(openSettings),
                                                name: .openFullSettings, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openHermes),
+                                               name: .openHermesChat, object: nil)
     }
 }

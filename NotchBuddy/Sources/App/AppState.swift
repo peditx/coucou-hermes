@@ -82,6 +82,18 @@ final class AppState: ObservableObject {
         }
     }
 
+    // Which engine answers the island chat — explicit, never inferred from
+    // which keys happen to be stored.
+    @Published var chatEngine: String = UserDefaults.standard.string(forKey: "chatEngine") ?? "claude" {
+        didSet { UserDefaults.standard.set(chatEngine, forKey: "chatEngine") }
+    }
+
+    // Engine tried when the primary fails: "none", "claude" or "hermes".
+    // "none" by default: nothing is retried somewhere the user did not pick.
+    var chatFallback: String = UserDefaults.standard.string(forKey: "chatFallback") ?? "none" {
+        didSet { UserDefaults.standard.set(chatFallback, forKey: "chatFallback") }
+    }
+
     // Context for prompt (window attach / file)
     @Published var promptContext: PromptContext? = nil
 

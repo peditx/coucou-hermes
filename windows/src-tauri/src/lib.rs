@@ -2,6 +2,7 @@
 
 mod claude;
 mod files;
+mod hermes;
 mod hooks;
 mod integrations;
 mod island;
@@ -18,7 +19,10 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
+use serde_json::Value;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use hermes::HermesEvent;
 use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
 
 use claude::{Chat, ChatContext, ChatReply};
@@ -241,6 +245,10 @@ fn approval_decline(app: AppHandle, request_id: String) {
 // ── Chat, files and secrets ───────────────────────────────────────────────────
 
 /// One chat turn. The API key and any file bytes stay on the Rust side.
+///
+/// Which engine answers — and which one catches a failure — is the user's
+/// setting, read fresh each turn so a change in Settings takes effect on the
+/// next message. Nothing switches engines on its own.
 #[tauri::command]
 async fn chat_send(
     shared: State<'_, Shared>,
@@ -248,13 +256,67 @@ async fn chat_send(
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let model = shared.settings.lock().unwrap().model.clone();
-    claude::send(&chat, &model, query, context).await
+    let (engine, fallback, model) = {
+        let s = shared.settings.lock().unwrap();
+        (s.chat_engine.clone(), s.chat_fallback.clone(), s.model.clone())
+    };
+
+    match dispatch(&chat, &engine, &model, query.clone(), context.clone()).await {
+        Ok(reply) => Ok(reply),
+        Err(primary) => {
+            // The fallback is only ever the one the user picked, and never the
+            // same engine twice.
+            if fallback == "none" || fallback.is_empty() || fallback == engine {
+                return Err(primary);
+            }
+            match dispatch(&chat, &fallback, &model, query, context).await {
+                Ok(reply) => Ok(reply),
+                // Primary's message is the root cause; the fallback failing is
+                // just more of the same story.
+                Err(_) => Err(primary),
+            }
+        }
+    }
+}
+
+async fn dispatch(
+    chat: &Chat,
+    engine: &str,
+    model: &str,
+    query: String,
+    context: Option<ChatContext>,
+) -> Result<ChatReply, String> {
+    if engine == "hermes" {
+        hermes::chat(chat, query, context).await
+    } else {
+        claude::send(chat, model, query, context).await
+    }
 }
 
 #[tauri::command]
 fn chat_reset(chat: State<Chat>) {
     chat.reset();
+}
+
+// ── Hermes Agent (remote) ─────────────────────────────────────────────────────
+
+/// One turn against the remote agent. Streams deltas over `channel` so the
+/// full-screen chat can render as they arrive; the transcript itself is the
+/// window's to hold.
+#[tauri::command]
+async fn hermes_send(
+    history: Vec<Value>,
+    prompt: String,
+    channel: Channel<HermesEvent>,
+) -> Result<(), String> {
+    hermes::send(history, prompt, channel).await
+}
+
+/// The chat window's empty state. Says "yes" or "no", never which half is
+/// missing — the settings window is where that is worked out.
+#[tauri::command]
+fn hermes_configured() -> bool {
+    hermes::configured()
 }
 
 /// Copies a dropped file into the inbox and reports its name back.
@@ -308,16 +370,27 @@ fn log_line(message: String) {
 /// error anywhere.
 const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
 
-/// In a dev build the pages are served by Vite, so the second window needs the
+/// In a dev build the pages are served by Vite, so a second window needs the
 /// absolute dev URL; a bundled build resolves it inside the app bundle.
-fn settings_page_url(app: &AppHandle) -> WebviewUrl {
+fn page_url(app: &AppHandle, page: &str) -> WebviewUrl {
     #[cfg(dev)]
     if let Some(mut base) = app.config().build.dev_url.clone() {
-        base.set_path("/settings.html");
+        base.set_path(&format!("/{page}"));
         return WebviewUrl::External(base);
     }
     let _ = app;
-    WebviewUrl::App("settings.html".into())
+    WebviewUrl::App(page.into())
+}
+
+/// Hiding instead of closing, or the window could never be reopened.
+fn hide_on_close(win: &tauri::WebviewWindow) {
+    let hidden = win.clone();
+    win.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = hidden.hide();
+        }
+    });
 }
 
 /// The settings window is created hidden at launch and only ever shown and
@@ -325,7 +398,7 @@ fn settings_page_url(app: &AppHandle) -> WebviewUrl {
 /// not — silently comes up blank in this app, so the window that works is the
 /// one that exists before the island's webview does.
 fn create_settings_window(app: &AppHandle) {
-    let url = settings_page_url(app);
+    let url = page_url(app, "settings.html");
     match WebviewWindowBuilder::new(app, "settings", url)
         .additional_browser_args(BROWSER_ARGS)
         .title("Settings — Coucou")
@@ -336,16 +409,7 @@ fn create_settings_window(app: &AppHandle) {
         .center()
         .build()
     {
-        Ok(win) => {
-            // Closing it must only hide it, or it could never be reopened.
-            let hidden = win.clone();
-            win.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = hidden.hide();
-                }
-            });
-        }
+        Ok(win) => hide_on_close(&win),
         Err(err) => log::line(format!("settings window failed: {err}")),
     }
 }
@@ -363,6 +427,42 @@ pub fn show_settings_window(app: &AppHandle) {
 #[tauri::command]
 fn open_settings_window(app: AppHandle) {
     show_settings_window(&app);
+}
+
+/// The full-screen chat. Maximised rather than exclusive-fullscreen: the user
+/// can still pull it off the screen edge. Same WebView2 arguments as every
+/// other window — see BROWSER_ARGS above — or it comes up blank.
+fn create_hermes_window(app: &AppHandle) {
+    let url = page_url(app, "hermes.html");
+    match WebviewWindowBuilder::new(app, "hermes", url)
+        .additional_browser_args(BROWSER_ARGS)
+        .title("Hermes — Coucou")
+        .inner_size(1180.0, 780.0)
+        .min_inner_size(720.0, 520.0)
+        .resizable(true)
+        .maximizable(true)
+        .maximized(true)
+        .visible(false)
+        .build()
+    {
+        Ok(win) => hide_on_close(&win),
+        Err(err) => log::line(format!("hermes window failed: {err}")),
+    }
+}
+
+pub fn show_hermes_window(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("hermes") else {
+        log::line("hermes window missing");
+        return;
+    };
+    let _ = win.unminimize();
+    let _ = win.show();
+    let _ = win.set_focus();
+}
+
+#[tauri::command]
+fn open_hermes_window(app: AppHandle) {
+    show_hermes_window(&app);
 }
 
 pub fn run() {
@@ -406,6 +506,9 @@ pub fn run() {
             refresh_integration,
             open_n8n,
             open_settings_window,
+            hermes_send,
+            hermes_configured,
+            open_hermes_window,
             set_paused,
         ])
         .setup(move |app| {
@@ -413,6 +516,7 @@ pub fn run() {
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
             create_settings_window(&handle);
+            create_hermes_window(&handle);
 
             if let Some(win) = island::window(&handle) {
                 island::make_non_activating(&win);

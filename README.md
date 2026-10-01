@@ -4,12 +4,13 @@
 
 # Coucou
 
-**A tiny friend that lives in your Mac's notch — or at the top of your screen on Windows — and keeps an eye on your Claude Code sessions.**
+**A tiny friend that lives in your Mac's notch — or at the top of your screen on Windows and Linux — and keeps an eye on your Claude Code sessions.**
 
 Approve permissions, watch your agents work, drop a file, chat with Claude — all without leaving what you're doing.
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-any-16A085?logo=linux&logoColor=white)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 ![SwiftUI](https://img.shields.io/badge/SwiftUI-native-0A84FF)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -35,6 +36,7 @@ Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch
 - ✅ **Approve from the notch** — Claude Code permission requests show up with **Allow / Deny**. One click, back to work.
 - 🧑‍💻 **Jump to the right terminal** — open the exact terminal window of a session *(macOS)*.
 - 💬 **Ask Claude anything** — built-in chat, straight from the notch.
+- 🪽 **Hermes too** — point Coucou at a remote [Hermes Agent](https://github.com/NousResearch/hermes-agent) and open a full-screen chat with it, like a desktop chat app. The island chat can also be served by Hermes: you pick the engine *and* the fallback in Settings, and nothing switches on its own. [Details](docs/HERMES.md).
 - 📎 **Drop a file on the notch** — Mochi turns into a box and swallows it, then ask a question about it or send it by email *(email: macOS, Mail.app)*.
 - 🪟 **Drag Mochi onto any window** — attach that window as context for Claude *(macOS)*.
 - 🔌 **Integrations** — Stripe payments, n8n workflows, GitHub, Vercel deployments, Resend emails, Notion, Cal.com. Each one gets its own little colored Mochi.
@@ -73,6 +75,22 @@ There is no notch on a PC, so the island slides out of the top edge of the scree
 instead of hiding inside one. See [`windows/README.md`](windows/README.md) for the
 rest of the differences.
 
+### Linux
+
+Packages are built by CI on every push — grab `Coucou-Linux-packages` from a
+workflow run, then:
+
+```bash
+sudo apt install ./Coucou-Linux-X.Y.Z-amd64.deb    # Debian / Ubuntu / Mint
+sudo dnf install ./Coucou-Linux-X.Y.Z-x86_64.rpm   # Fedora / RPM-based
+```
+
+There is no notch, and no compositor lets a client pin a window to the top edge
+on every desktop — so the island is an always-on-top window that positions
+itself, falling back to XWayland on Wayland sessions. See
+[`linux/README.md`](linux/README.md) for the differences and what is not wired
+up yet.
+
 ### Build from source
 
 **macOS** — requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -94,15 +112,29 @@ npm install
 npm run pack                # installer lands in windows/release/
 ```
 
+**Linux** — requirements: [Rust](https://rustup.rs), Node 20+, and Tauri's build
+dependencies (listed in [`linux/README.md`](linux/README.md)).
+
+```bash
+git clone https://github.com/Louis-CFM/coucou.git
+cd coucou/linux
+npm install
+npm run pack                # .deb + .rpm land in linux/release/
+```
+
+Nothing is compiled on a development machine: every build runs in GitHub
+Actions.
+
 ## Setup
 
-Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows) → **Settings…**
+Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows, Linux) → **Settings…**
 
 | What | Why | Where the key goes |
 |---|---|---|
 | **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
-| **Anthropic API key** | chat and questions about files | Keychain / Windows Credential Manager |
-| Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Windows Credential Manager, all optional |
+| **Anthropic API key** | chat and questions about files | Keychain / Credential Manager / Secret Service |
+| **Hermes URL + key** *(optional)* | the full-screen Hermes chat, and the island chat if you pick Hermes as its engine | Keychain / Credential Manager / Secret Service |
+| Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Credential Manager / Secret Service, all optional |
 
 If Coucou isn't running, the hook exits immediately: **Claude Code is never blocked.**
 
@@ -135,6 +167,11 @@ The macOS app is native Swift 6 / SwiftUI / AppKit with **zero third-party depen
 - A [Tauri 2](https://tauri.app) app (Rust + TypeScript): the island is a transparent, always-on-top window that never steals focus, Mochi is drawn in Canvas 2D with the same shapes, timings and sounds as on the Mac.
 - Claude Code hooks go through a tiny `coucou-hook.exe` and a named pipe; keys live in Windows Credential Manager.
 - Details and differences in [`windows/README.md`](windows/README.md).
+
+**Linux**
+
+- The same Tauri 2 app with the platform layer swapped: the named pipe becomes a Unix socket at `$XDG_RUNTIME_DIR/coucou.sock` (checked with `SO_PEERCRED`), paths move to XDG, keys go to the Secret Service, and `.deb`/`.rpm` replace the NSIS installer.
+- Details, packaging and what is still missing in [`linux/README.md`](linux/README.md).
 
 ## Contributing
 

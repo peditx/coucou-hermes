@@ -2,7 +2,7 @@
 // page is opened in a plain browser, so the island can be iterated on with
 // `npm run dev` alone.
 
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
@@ -57,6 +57,11 @@ export const Bridge = {
 
   openSettingsWindow: () => call<void>("open_settings_window"),
 
+  /** Opens the full-screen Hermes chat window. */
+  openHermesWindow: () => call<void>("open_hermes_window"),
+  /** URL *and* key are in place — never either value. */
+  hermesConfigured: () => call<boolean>("hermes_configured"),
+
   /** Writes to %LOCALAPPDATA%\Coucou\coucou.log, next to the Rust lines. */
   log: (message: string) => call<void>("log_line", { message }),
 
@@ -89,6 +94,11 @@ export const Bridge = {
   secretPresent: (key: string) => call<boolean>("secret_present", { key }),
   secretSet: (key: string, value: string) => callOrThrow<void>("secret_set", { key, value }),
   secretClear: (key: string) => callOrThrow<void>("secret_clear", { key }),
+
+  // ── Hermes (remote agent) ────────────────────────────────────────────────
+  /** One streamed turn. Resolves when the stream ends, rejects with the reason. */
+  hermesSend: (history: ChatTurn[], prompt: string, onDelta: (text: string) => void) =>
+    streamHermes(history, prompt, onDelta),
 
   // ── Integrations ──────────────────────────────────────────────────────────
   refreshIntegration: (id: string) => call<void>("refresh_integration", { id }),
@@ -129,6 +139,27 @@ export interface HookPreview {
   settingsPath: string;
   /** Hand back to hooksApply so only the reviewed diff is ever written. */
   fingerprint: string;
+}
+
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+export type HermesEvent = { type: "delta"; text: string } | { type: "done" };
+
+/**
+ * One streamed turn. Rust signs the request and reads the bearer key; all that
+ * crosses back is text, so this file never touches the secret.
+ */
+export async function streamHermes(
+  history: ChatTurn[],
+  prompt: string,
+  onDelta: (text: string) => void,
+): Promise<void> {
+  if (!IS_TAURI) throw new Error("not running inside Coucou");
+  const channel = new Channel<HermesEvent>();
+  channel.onmessage = (event) => {
+    if (event.type === "delta") onDelta(event.text);
+  };
+  await invoke("hermes_send", { history, prompt, channel });
 }
 
 /** Same as `call`, but surfaces the error so the UI can show what went wrong. */

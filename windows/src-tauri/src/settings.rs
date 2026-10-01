@@ -20,10 +20,26 @@ pub struct Settings {
     /// Defaulted explicitly so a settings.json written by an older build still loads.
     #[serde(default = "default_model")]
     pub model: String,
+    /// Which engine answers the island chat: "claude" or "hermes".
+    /// Explicit — never inferred from which keys happen to be stored.
+    #[serde(default = "default_chat_engine")]
+    pub chat_engine: String,
+    /// Engine tried when the primary one fails: "none", "claude" or "hermes".
+    /// "none" by default: no request is retried somewhere the user did not pick.
+    #[serde(default = "default_chat_fallback")]
+    pub chat_fallback: String,
 }
 
 fn default_model() -> String {
     crate::claude::DEFAULT_MODEL.to_string()
+}
+
+fn default_chat_engine() -> String {
+    "claude".into()
+}
+
+fn default_chat_fallback() -> String {
+    "none".into()
 }
 
 impl Default for Settings {
@@ -43,6 +59,8 @@ impl Default for Settings {
             autostart: false,
             hooks_installed: false,
             model: default_model(),
+            chat_engine: default_chat_engine(),
+            chat_fallback: default_chat_fallback(),
         }
     }
 }

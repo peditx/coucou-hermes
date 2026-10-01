@@ -28,6 +28,16 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   return el;
 }
 
+/** A labelled dropdown bound to one field of `settings`; the caller saves. */
+function select(options: [string, string][], value: string, onChange: (v: string) => void): HTMLElement {
+  const el = h("select", {}) as HTMLSelectElement;
+  const all = options.some(([id]) => id === value) ? options : [...options, [value, value]];
+  for (const [id, label] of all) el.append(h("option", { value: id, text: label }));
+  el.value = value;
+  el.addEventListener("change", () => onChange(el.value));
+  return el;
+}
+
 function statusDot(ok: boolean): HTMLElement {
   return h("i", { class: "dot", style: `background:${ok ? "#22c55e" : "#f4505e"}` });
 }
@@ -230,14 +240,8 @@ function apiSection(hasKey: boolean): HTMLElement {
     }
   });
 
-  const model = h("select", {}) as HTMLSelectElement;
-  for (const [id, label] of MODELS) model.append(h("option", { value: id, text: label }));
-  if (!MODELS.some(([id]) => id === settings.model)) {
-    model.append(h("option", { value: settings.model, text: settings.model }));
-  }
-  model.value = settings.model;
-  model.addEventListener("change", () => {
-    settings.model = model.value;
+  const model = select(MODELS, settings.model, (v) => {
+    settings.model = v;
     void save();
   });
 
@@ -251,6 +255,142 @@ function apiSection(hasKey: boolean): HTMLElement {
     h("div", { class: "row" }, h("label", { text: "API key" }), field, saveBtn, clearBtn),
     h("div", { class: "row" }, h("label", { text: "Model" }), model),
     feedback,
+  );
+}
+
+// ── Island chat engine ───────────────────────────────────────────────────────
+
+const ENGINES: [string, string][] = [
+  ["claude", "Claude — Anthropic API"],
+  ["hermes", "Hermes — remote agent"],
+];
+
+const FALLBACKS: [string, string][] = [
+  ["none", "No fallback"],
+  ["claude", "Claude"],
+  ["hermes", "Hermes"],
+];
+
+function engineSection(claudeOk: boolean, hermesOk: boolean): HTMLElement {
+  const dot = statusDot(false);
+  const refresh = () => {
+    const ready = settings.chatEngine === "hermes" ? hermesOk : claudeOk;
+    dot.style.background = ready ? "#22c55e" : "#f4505e";
+  };
+
+  const engine = select(ENGINES, settings.chatEngine, (v) => {
+    settings.chatEngine = v;
+    void save();
+    refresh();
+  });
+  const fallback = select(FALLBACKS, settings.chatFallback, (v) => {
+    settings.chatFallback = v;
+    void save();
+  });
+  refresh();
+
+  return h(
+    "section",
+    {},
+    h("h2", {}, dot, h("span", { text: "Island chat" })),
+    h("div", { class: "row" }, h("label", { text: "Engine" }), engine),
+    h("div", { class: "row" }, h("label", { text: "If it fails" }), fallback),
+    h("div", {
+      class: "hint",
+      text: "Nothing switches on its own: only the engine above is used, and only the fallback above is ever tried after it.",
+    }),
+  );
+}
+
+// ── Hermes Agent section ─────────────────────────────────────────────────────
+
+function hermesSection(): HTMLElement {
+  const dot = statusDot(false);
+  const state = h("span", { class: "hint", text: "Not connected yet." });
+  const feedback = h("div", {});
+
+  const urlField = h("input", {
+    type: "text",
+    placeholder: "https://agent.example:8642",
+    style: "flex:1 1 auto;min-width:0",
+    autocomplete: "off",
+    spellcheck: "false",
+  }) as HTMLInputElement;
+  const keyField = h("input", {
+    type: "password",
+    placeholder: "API server key",
+    style: "flex:1 1 auto;min-width:0",
+    autocomplete: "off",
+    spellcheck: "false",
+  }) as HTMLInputElement;
+
+  const saveUrl = h("button", { class: "primary", text: "Save URL" });
+  const saveKey = h("button", { class: "primary", text: "Save key" });
+  const clearKey = h("button", { class: "danger", text: "Remove" });
+  const openChat = h("button", { text: "Open chat" });
+
+  async function refresh() {
+    const hasUrl = (await Bridge.secretPresent("hermes-url")) ?? false;
+    const hasKey = (await Bridge.secretPresent("hermes-token")) ?? false;
+    const both = hasUrl && hasKey;
+    dot.style.background = both ? "#22c55e" : hasUrl || hasKey ? "#f5a524" : "#f4505e";
+    state.textContent = both
+      ? "Connected. The full-screen chat can reach your agent."
+      : hasUrl
+        ? "URL saved — the key is still missing."
+        : hasKey
+          ? "Key saved — the URL is still missing."
+          : "Not connected yet.";
+    urlField.placeholder = hasUrl ? "••••••••  (saved)" : "https://agent.example:8642";
+    keyField.placeholder = hasKey ? "••••••••  (saved)" : "API server key";
+    clearKey.style.display = hasKey ? "" : "none";
+  }
+
+  async function save(key: string, value: string, ok: string) {
+    clear(feedback);
+    if (!value.trim()) return;
+    try {
+      await Bridge.secretSet(key, value.trim());
+      if (key === "hermes-url") urlField.value = "";
+      else keyField.value = "";
+      feedback.append(h("div", { class: "notice ok", text: ok }));
+      await refresh();
+    } catch (err) {
+      feedback.append(h("div", { class: "notice err", text: `Could not save: ${String(err)}` }));
+    }
+  }
+
+  saveUrl.addEventListener("click", () =>
+    void save("hermes-url", urlField.value, "URL saved."));
+  saveKey.addEventListener("click", () =>
+    void save("hermes-token", keyField.value, "Saved. It never touches disk."));
+  clearKey.addEventListener("click", async () => {
+    clear(feedback);
+    try {
+      await Bridge.secretClear("hermes-token");
+      feedback.append(h("div", { class: "notice ok", text: "Key removed." }));
+      await refresh();
+    } catch (err) {
+      feedback.append(h("div", { class: "notice err", text: `Could not remove: ${String(err)}` }));
+    }
+  });
+  openChat.addEventListener("click", () => void Bridge.openHermesWindow());
+
+  void refresh();
+
+  return h(
+    "section",
+    {},
+    h("h2", {}, dot, h("span", { text: "Hermes Agent" })),
+    state,
+    h("div", { class: "row" }, h("label", { text: "API server URL" }), urlField, saveUrl),
+    h("div", { class: "row" }, h("label", { text: "Key" }), keyField, saveKey, clearKey),
+    h("div", { class: "row" }, openChat),
+    feedback,
+    h("div", {
+      class: "hint",
+      text: "Add the MCP server on the agent side too: ~/.hermes/config.yaml → mcp_servers. Then /reload-mcp.",
+    }),
   );
 }
 
@@ -430,6 +570,7 @@ async function main() {
   };
 
   const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+  const hermesOk = (await Bridge.hermesConfigured()) ?? false;
 
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
@@ -443,6 +584,8 @@ async function main() {
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
     claudeSection(status),
     apiSection(hasKey),
+    engineSection(hasKey, hermesOk),
+    hermesSection(),
     integrationsSection(present),
     generalSection(),
     h("div", {

@@ -16,6 +16,9 @@ pub const KNOWN_KEYS: &[&str] = &[
     "resend-api-key",
     "notion-api-key",
     "calcom-api-key",
+    // Hermes Agent (remote): API-server base URL and bearer key.
+    "hermes-url",
+    "hermes-token",
 ];
 
 fn entry(key: &str) -> Option<Entry> {
