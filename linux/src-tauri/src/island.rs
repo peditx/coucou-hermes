@@ -106,20 +106,31 @@ pub fn window(app: &AppHandle) -> Option<WebviewWindow> {
 
 /// The pointer's position in screen coordinates.
 ///
-/// TODO(linux): Wayland gives clients no way to read the global pointer at all,
-/// and X11 needs an explicit query (`XQueryPointer`). Until that lands the island
-/// cannot wake on hover — it still opens from the tray, and everything else in
-/// the poll (display hot-plug) keeps working. This is the one hole in the port.
-fn cursor_physical() -> Option<(f64, f64)> {
-    None
+/// Asked through Tauri, which hands the question to the event loop and lets GDK
+/// answer it there — this thread never touches GTK itself. On X11, the backend
+/// `main.rs` forces, that is the root pointer; the answer arrives physical, the
+/// same unit `outer_position` reports, so the hit test needs no conversion.
+///
+/// Wayland gives a client no global pointer and answers (0, 0). That is read as
+/// "unknown", not as the top-left corner: the caller idles instead of guessing a
+/// hit test, so a Wayland session keeps the old behaviour — the panel takes the
+/// mouse and the island opens from the tray. A pointerless hit test is strictly
+/// worse than no hit test, because it can only ever be wrong about where you are.
+fn cursor_physical(app: &AppHandle) -> Option<(f64, f64)> {
+    let p = app.cursor_position().ok()?;
+    if p.x == 0.0 && p.y == 0.0 {
+        return None;
+    }
+    Some((p.x, p.y))
 }
 
 /// Lets dropped files reach the app again — a WebView2/OLE problem only. WebKitGTK
 /// delivers drags to the window's own destination, so there is nothing to undo.
 pub fn unblock_webview_drops(_app: &AppHandle) {}
 
-/// True while the left mouse button is held. Needs a global pointer query, which
-/// is the same hole as `cursor_physical` — see its note.
+/// True while the left mouse button is held. The position query behind
+/// `cursor_physical` reports where the pointer is, not what it is pressing, so
+/// this stays false — see the drag note in the poll below.
 fn left_button_down() -> bool {
     false
 }
@@ -137,7 +148,7 @@ fn monitor_contains(m: &Monitor, x: f64, y: f64) -> bool {
 fn target_monitor(app: &AppHandle, pref: &str) -> Option<Monitor> {
     let monitors = app.available_monitors().ok()?;
     if pref == "cursor" {
-        if let Some((cx, cy)) = cursor_physical() {
+        if let Some((cx, cy)) = cursor_physical(app) {
             if let Some(m) = monitors.iter().find(|m| monitor_contains(m, cx, cy)) {
                 return Some(m.clone());
             }
@@ -247,8 +258,10 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 let Some(win) = window(&app) else { continue };
                 let Ok(origin) = win.outer_position() else { continue };
                 let scale = win.scale_factor().unwrap_or(1.0);
-                // No pointer query yet: idle instead of spinning at 60 Hz.
-                let Some((cx, cy)) = cursor_physical() else {
+                // No pointer to read: idle rather than spin at 60 Hz, and leave
+                // the window flag alone so a pointerless session never eats a
+                // click it cannot attribute to the island.
+                let Some((cx, cy)) = cursor_physical(&app) else {
                     std::thread::sleep(Duration::from_millis(500));
                     continue;
                 };
