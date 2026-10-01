@@ -14,10 +14,12 @@ on:
 permissions:
   contents: write
 
-# Publishing is off until a release is wanted; every run still uploads the
-# packages as an artifact so a build can be inspected without tagging anything.
+# A `linux-v*` tag publishes straight to peditx/coucou-hermes; every other run
+# still uploads the packages as an artifact, so a build can be inspected
+# without tagging anything. The workflow token only covers this compile repo,
+# so the publish step authenticates with the PAT stored as PEDITX_TOKEN.
 env:
-  PUBLISH: 'false'
+  PUBLISH: 'true'
 
 jobs:
   build:
@@ -108,16 +110,24 @@ jobs:
       - name: Publish the release
         if: env.PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/linux-v')
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PEDITX_TOKEN }}
         run: |
           v="${{ steps.pack.outputs.version }}"
           notes="Coucou for Linux $v — Mochi at the top of your screen. Debian/Ubuntu: sudo apt install ./Coucou-Linux-$v-amd64.deb — Fedora: sudo dnf install ./Coucou-Linux-$v-x86_64.rpm"
           # --latest=false is not cosmetic: without it GitHub hands "Latest" to
           # whichever release was published last, and the site's Download for Mac
           # button points at /releases/latest. The macOS `v*` releases own that slot.
+          # The release goes to the fork, not to this compile repo, and
+          # --target pins the tag to the commit that was actually built instead
+          # of the fork's default branch. Deleting first keeps a re-run of a
+          # green job from dying on "release already exists".
+          gh release delete "${GITHUB_REF_NAME}" \
+            --repo peditx/coucou-hermes --cleanup-tag --yes 2>/dev/null || true
           gh release create "${GITHUB_REF_NAME}" \
             "release/Coucou-Linux-$v-amd64.deb" \
             "release/Coucou-Linux-$v-x86_64.rpm" \
+            --repo peditx/coucou-hermes \
+            --target "$GITHUB_SHA" \
             --title "Coucou for Linux $v" \
             --notes "$notes" \
             --latest=false

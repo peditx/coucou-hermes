@@ -28,3 +28,37 @@ jobs:
             build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
+
+      # No binary goes in: the shipping macOS app is built and notarised locally
+      # with scripts/release.sh, and an unsigned zip here would break the
+      # download link on the site. The tag only records that the compile check
+      # passed. The release is created in the fork — this repo is the compile
+      # farm — so it authenticates with the PAT stored as PEDITX_TOKEN.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.PEDITX_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          v="${tag#v}"
+          gh release delete "$tag" \
+            --repo peditx/coucou-hermes --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$tag" \
+            --repo peditx/coucou-hermes \
+            --target "$GITHUB_SHA" \
+            --title "Coucou $v" \
+            --latest \
+            --notes "$(cat <<EOF
+          Coucou $v — macOS, and this release has no binary attached.
+
+          The shipping macOS app is built and notarised locally with scripts/release.sh;
+          CI only proves it compiles on a clean machine, which is what this tag records.
+          An unsigned zip here would break the download link on the site.
+
+          Linux (.deb / .rpm) and Windows (installer + portable) packages for this very
+          same commit are attached to the linux-v$v and windows-v$v releases.
+
+          In 0.1.1: the Linux app for the first time, the Hermes Agent chat on all three
+          platforms, and an explicit choice of island chat engine and fallback in
+          Settings — nothing switches on its own.
+          EOF
+          )"
