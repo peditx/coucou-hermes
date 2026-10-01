@@ -113,11 +113,23 @@ struct SettingsView: View {
 
                 // MARK: Hermes
                 GroupBox("Hermes Agent") {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Hermes Agent is a separate app you run (locally or on a remote machine). Coucou only talks to its OpenAI-compatible API server. Install: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash, then run `hermes`. The API server listens on 127.0.0.1:8642 by default (set API_SERVER_HOST/PORT to change).")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+
                         TextField("Server URL  (https://agent.example:8642)", text: $hermesUrl)
                             .textFieldStyle(.roundedBorder)
+                        Text("Use the URL where the API server is reachable from THIS machine. Local: http://127.0.0.1:8642  |  Remote (SSH tunnel): http://127.0.0.1:8642  |  Remote (Tailscale/VPN): http://100.x.y.z:8642  |  Public HTTPS: https://agent.example.com")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+
                         SecureField("API_SERVER_KEY", text: $hermesKey)
                             .textFieldStyle(.roundedBorder)
+                        Text("The API_SERVER_KEY from the Hermes side (shown on first run, or in ~/.hermes/.env). This key never leaves your Keychain.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+
                         HStack(spacing: 10) {
                             Button("Save") {
                                 saveKey("hermes-url",   value: hermesUrl)
@@ -131,7 +143,7 @@ struct SettingsView: View {
                                 NotificationCenter.default.post(name: .openHermesChat, object: nil)
                             }
                         }
-                        Text("Then on the agent side: ~/.hermes/config.yaml → mcp_servers, and /reload-mcp.")
+                        Text("For local file access from the remote agent: on the Hermes machine, edit ~/.hermes/config.yaml → mcp_servers.coucou.url = "https://<your-tunnel>/mcp" + Authorization: Bearer <token>. Then run /reload-mcp in Hermes. The token goes in ~/.hermes/.env, not in the YAML.")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -162,7 +174,7 @@ struct SettingsView: View {
                             .onChange(of: chatFallback) { _, v in AppState.shared.chatFallback = v }
                         }
 
-                        Text("Nothing switches on its own — only the engine above is used, and only the fallback above is ever tried after it.")
+                        Text("Engine = what powers the chat in the island. Fallback = what is tried ONLY if the engine errors. They are independent choices — nothing ever switches automatically.")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }

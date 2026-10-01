@@ -298,7 +298,7 @@ function engineSection(claudeOk: boolean, hermesOk: boolean): HTMLElement {
     h("div", { class: "row" }, h("label", { text: "If it fails" }), fallback),
     h("div", {
       class: "hint",
-      text: "Nothing switches on its own: only the engine above is used, and only the fallback above is ever tried after it.",
+      text: "Engine = what powers the chat in the island. Fallback = what is tried ONLY if the engine errors. They are independent choices — nothing ever switches automatically.",
     }),
   );
 }
@@ -384,13 +384,25 @@ function hermesSection(): HTMLElement {
     {},
     h("h2", {}, dot, h("span", { text: "Hermes Agent" })),
     state,
+    h("div", {
+      class: "hint",
+      text: "Hermes Agent is a separate app you run (locally or on a remote machine). Coucou only talks to its OpenAI-compatible API server. Install: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash, then run `hermes`. The API server listens on 127.0.0.1:8642 by default (set API_SERVER_HOST/PORT to change).",
+    }),
     h("div", { class: "row" }, h("label", { text: "API server URL" }), urlField, saveUrl),
+    h("div", {
+      class: "hint",
+      text: "Use the URL where the API server is reachable from THIS machine. Local: http://127.0.0.1:8642  |  Remote (SSH tunnel): http://127.0.0.1:8642  |  Remote (Tailscale/VPN): http://100.x.y.z:8642  |  Public HTTPS: https://agent.example.com",
+    }),
     h("div", { class: "row" }, h("label", { text: "Key" }), keyField, saveKey, clearKey),
+    h("div", {
+      class: "hint",
+      text: "The API_SERVER_KEY from the Hermes side (shown on first run, or in ~/.hermes/.env). This key never leaves your Secret Service.",
+    }),
     h("div", { class: "row" }, openChat),
     feedback,
     h("div", {
       class: "hint",
-      text: "Add the MCP server on the agent side too: ~/.hermes/config.yaml → mcp_servers. Then /reload-mcp.",
+      text: "For local file access from the remote agent: on the Hermes machine, edit ~/.hermes/config.yaml → mcp_servers.coucou.url = "https://<your-tunnel>/mcp" + Authorization: Bearer <token>. Then run /reload-mcp in Hermes. The token goes in ~/.hermes/.env, not in the YAML.",
     }),
   );
 }

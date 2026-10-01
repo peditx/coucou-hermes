@@ -134,7 +134,7 @@ Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows, Li
 |---|---|---|
 | **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
 | **Anthropic API key** | chat and questions about files | Keychain / Credential Manager / Secret Service |
-| **Hermes URL + key** *(optional)* | the full-screen Hermes chat, and the island chat if you pick Hermes as its engine | Keychain / Credential Manager / Secret Service |
+| **Hermes URL + key** *(optional)* | the full-screen Hermes chat, and the island chat if you pick Hermes as its engine; for local files from the remote agent, add MCP on the Hermes side | Keychain / Credential Manager / Secret Service |
 | Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Credential Manager / Secret Service, all optional |
 
 If Coucou isn't running, the hook exits immediately: **Claude Code is never blocked.**
