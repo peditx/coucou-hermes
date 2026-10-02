@@ -1066,9 +1066,9 @@ plugins:
         let before = "FOO=1\nAPI_SERVER_KEY=super-secret\n";
         let after = env_after(before, "super-secret");
         assert!(!redact_env(before).contains("super-secret"));
-        assert!(!redact_env(after).contains("super-secret"));
-        assert!(redact_env(after).contains("API_SERVER_KEY=••••••••"));
-        assert!(redact_env(after).contains("API_SERVER_ENABLED=true"));
+        assert!(!redact_env(&after).contains("super-secret"));
+        assert!(redact_env(&after).contains("API_SERVER_KEY=••••••••"));
+        assert!(redact_env(&after).contains("API_SERVER_ENABLED=true"));
     }
 
     #[test]
