@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Settings → Hermes Agent spells out the four commands, in order — install, the key in `~/.hermes/.env`, `hermes gateway` on `http://127.0.0.1:8642`, a dated backup of `config.yaml` before anything edits it — as one copy-paste block with the real addresses
+- The same block lives in `docs/HERMES.md`, next to the official docs to re-read before changing it
+- The key hint names the store the platform actually uses: Secret Service on Linux, Credential Manager on Windows
+- The MCP hint stops showing a tunnel URL this app cannot serve — the local-file bridge is plan, not shipped, and now says so
+
 ## 0.1.4
 
 - Global shortcut that reveals the island (`Ctrl+Shift+N` by default) — Windows and Linux, off until you switch it on in Settings
