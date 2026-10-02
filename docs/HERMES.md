@@ -51,6 +51,11 @@ Settings → *Hermes Agent* shows this block; it is here because every line of i
 comes from the official API-server docs, and those are the ones to re-read
 before changing it.
 
+Steps 2 to 4 are also exactly what **Install plugin** does in one click — dated
+backup, diff, then write — plus the URL and the key in the system keyring.
+Those four steps are kept here because they are what you would run by hand, and
+because they are the copy to check the docs against.
+
 ```bash
 # 1  install
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
@@ -69,6 +74,8 @@ cp ~/.hermes/config.yaml ~/.hermes/config.yaml.bak-$(date +%F-%H%M%S)
 
 Then the URL and that same key go into Coucou's *Hermes Agent* section — which
 is the whole connection: Coucou is a client of this server and nothing else.
+Install puts them there itself, so an install with nothing typed is already a
+working connection.
 
 The order is load-bearing twice. `API_SERVER_ENABLED` defaults to `false`, so
 step 2 is not optional, and a key has no default — it is required even on the
@@ -277,9 +284,19 @@ Hermes is never blocked either.
 
 `linux/src-tauri/src/hermes_hooks.rs` and `windows/src-tauri/src/hermes_hooks.rs`
 are identical, and `NotchBuddy/Sources/App/HermesHooks.swift` is the same logic
-in Swift. All three follow the Claude hooks discipline: read → dated backup →
-merge only our keys → unified diff → write only after an explicit click, and
-only while `config.yaml` still matches the bytes the diff was computed from.
+in Swift for `config.yaml` and the plugin. All three follow the Claude hooks
+discipline: read → dated backup → merge only our keys → unified diff → write
+only after an explicit click, and only while the files still match the bytes
+the diff was computed from — for Linux and Windows that fingerprint now covers
+`config.yaml` **and** `.env` together.
+
+On Linux and Windows Install also writes `~/.hermes/.env`: `API_SERVER_ENABLED`
+set to `true`, and an `API_SERVER_KEY` — theirs if they have one already,
+otherwise 32 random bytes generated at write time and stored in the keyring.
+The value never appears in the diff (it is masked) or in a log. Uninstall
+leaves `.env` alone: `API_SERVER_ENABLED` is Hermes's own setting and a key the
+user wrote is theirs. The keyring is only ever *filled* — a URL or key the user
+typed into it is not overwritten.
 
 The YAML is edited **line by line and never round-tripped through a parser**:
 `config.yaml` carries comments, anchors and ordering that belong to the user
@@ -292,6 +309,12 @@ The macOS app ships the plugin in its bundle (`hermes-plugin/`, a folder
 resource in `project.yml`) so install needs no network. The App Store build
 cannot reach `~/.hermes` from inside its sandbox, so the install buttons are
 absent there.
+
+`Start API server` runs `hermes gateway` detached (own session, no console
+window) with stdout and stderr appended to
+`~/.local/state/coucou/hermes-gateway.log`, after probing the saved URL so an
+up server is reported instead of started twice. It refuses a URL that is not
+this machine's own — that one is started where it runs.
 
 *(Re-read the official plugin docs before changing any of this — the config
 keys and the fail-closed default are theirs, not ours.)*

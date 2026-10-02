@@ -83,11 +83,18 @@ export const Bridge = {
   hermesHooksPreview: (install: boolean) =>
     callOrThrow<HermesHookPreview>("hermes_hooks_preview", { install }),
   /**
-   * Writes ~/.hermes/config.yaml and the plugin files — only ever after an
-   * explicit click, and only while the file still matches the reviewed diff.
+   * Writes ~/.hermes/config.yaml, ~/.hermes/.env and the plugin files, then
+   * remembers the URL and key — only ever after an explicit click, and only
+   * while both files still match the reviewed diff.
    */
   hermesHooksApply: (install: boolean, fingerprint: string) =>
     callOrThrow<string>("hermes_hooks_apply", { install, fingerprint }),
+  /**
+   * `hermes gateway` on this machine: probes the saved URL first, so a server
+   * that is already up is reported rather than started twice. A URL somewhere
+   * else is refused — that one is started where it runs.
+   */
+  hermesStartGateway: () => callOrThrow<string>("hermes_start_gateway"),
 
   approvalDecision: (requestId: string, decision: "allow" | "deny") =>
     call<void>("approval_decision", { requestId, decision }),

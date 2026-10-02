@@ -329,6 +329,7 @@ function hermesSection(): HTMLElement {
   const saveKey = h("button", { class: "primary", text: "Save key" });
   const clearKey = h("button", { class: "danger", text: "Remove" });
   const openChat = h("button", { text: "Open chat" });
+  const startGw = h("button", { text: "Start API server" });
 
   async function refresh() {
     const hasUrl = (await Bridge.secretPresent("hermes-url")) ?? false;
@@ -376,6 +377,15 @@ function hermesSection(): HTMLElement {
     }
   });
   openChat.addEventListener("click", () => void Bridge.openHermesWindow());
+  startGw.addEventListener("click", async () => {
+    clear(feedback);
+    try {
+      const msg = await Bridge.hermesStartGateway();
+      feedback.append(h("div", { class: "notice ok", text: msg || "Started." }));
+    } catch (err) {
+      feedback.append(h("div", { class: "notice err", text: `Could not start: ${String(err)}` }));
+    }
+  });
 
   void refresh();
 
@@ -386,25 +396,24 @@ function hermesSection(): HTMLElement {
     state,
     h("div", {
       class: "hint",
-      text: "Hermes Agent is a separate app you run (locally or on a remote machine); Coucou only talks to its OpenAI-compatible API server. Run these four in order, then paste the URL and the key below:",
+      text: "Hermes Agent is a separate app you run (locally or on a remote machine); Coucou only talks to its OpenAI-compatible API server. One install writes everything that server needs — or do it by hand:",
     }),
-    // One block, not four sentences: this is run in one place in one order, and
-    // half a recipe is how people end up with an API server that never starts —
-    // API_SERVER_ENABLED defaults to false, so step 2 is not optional.
+    // One block, in order. Step 2 is the Install button two sections down and
+    // step 3 is the button right here: half a recipe is how people end up with
+    // an API server that never starts, because API_SERVER_ENABLED defaults to
+    // false and the server refuses every request without a key.
     h("div", { class: "diff" }, [
-      " 1  Install Hermes\n",
+      " 1  Install Hermes (once)\n",
       "    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash\n",
       "\n",
-      " 2  Copy for Hermes — its key lives in ~/.hermes/.env\n",
-      "    API_SERVER_ENABLED=true\n",
-      "    API_SERVER_KEY=<any secret you pick>\n",
+      " 2  Install plugin — button below. Writes ~/.hermes/config.yaml, the plugin,\n",
+      "    ~/.hermes/.env (API_SERVER_ENABLED=true + API_SERVER_KEY) and remembers\n",
+      "    the URL and that key here. Backup and diff first, always.\n",
       "\n",
-      " 3  Start the API server — http://127.0.0.1:8642 unless API_SERVER_HOST / API_SERVER_PORT say otherwise\n",
-      "    hermes gateway\n",
+      " 3  Start API server — button below, runs: hermes gateway\n",
       "    → [API Server] listening on http://127.0.0.1:8642\n",
       "\n",
-      " 4  Copy and back up ~/.hermes/config.yaml before anything edits it\n",
-      "    cp ~/.hermes/config.yaml ~/.hermes/config.yaml.bak-$(date +%F-%H%M%S)",
+      " by hand instead: docs/HERMES.md — The four commands, in order",
     ].join("")),
     h("div", { class: "row" }, h("label", { text: "API server URL" }), urlField, saveUrl),
     h("div", {
@@ -414,9 +423,9 @@ function hermesSection(): HTMLElement {
     h("div", { class: "row" }, h("label", { text: "Key" }), keyField, saveKey, clearKey),
     h("div", {
       class: "hint",
-      text: "The API_SERVER_KEY you wrote in step 2 — it lives in ~/.hermes/.env and never leaves your Secret Service.",
+      text: "The API_SERVER_KEY in ~/.hermes/.env — Install writes one when you have none, and reuses yours when you do. It never leaves your Secret Service.",
     }),
-    h("div", { class: "row" }, openChat),
+    h("div", { class: "row" }, startGw, openChat),
     feedback,
     h("div", {
       class: "hint",
@@ -459,7 +468,7 @@ function hermesHooksSection(status: HermesHookStatus): HTMLElement {
       }),
       h("div", {
         class: "hint",
-        text: "The plugin is a file, not a part of this app: Install copies it to ~/.hermes/plugins/coucou/ and Hermes loads it from there. Coucou only carries a copy so the install needs no network.",
+        text: "Install writes three things: Coucou's transport into config.yaml, the plugin into ~/.hermes/plugins/coucou/, and API_SERVER_ENABLED plus a key into ~/.hermes/.env — then it remembers the URL and that key for the chat above. Coucou carries its own copy, so none of it needs the network.",
       }),
       h("div", { class: "row" },
         h("label", { text: "config.yaml" }),
@@ -524,12 +533,12 @@ function hermesHooksSection(status: HermesHookStatus): HTMLElement {
       h("div", {
         class: "hint",
         text: install
-          ? "This is exactly what will change in your Hermes config. Your own settings are left untouched."
+          ? "This is exactly what will change: config.yaml, ~/.hermes/.env and the keyring. Your own settings are left untouched — and Uninstall takes our entries out of config.yaml but leaves .env alone."
           : "This removes Coucou's entries only. Your own Hermes settings are left untouched.",
       }),
       renderDiff(preview.diff),
       h("div", { class: "row" },
-        h("span", { class: "path", text: `Backup → ${preview.backup}` }),
+        h("span", { class: "path", text: `Backup → ${preview.backup} (+ .env when there is one)` }),
       ),
     );
     const confirm = h("button", {
@@ -539,13 +548,11 @@ function hermesHooksSection(status: HermesHookStatus): HTMLElement {
     confirm.addEventListener("click", async () => {
       confirm.disabled = true;
       try {
-        const backup = await Bridge.hermesHooksApply(install, preview.fingerprint);
+        const done = await Bridge.hermesHooksApply(install, preview.fingerprint);
         clear(body);
         body.append(h("div", {
           class: "notice ok",
-          text: backup
-            ? `Done. Previous config saved as ${backup}. Start a new Hermes session to pick it up.`
-            : "Done. Start a new Hermes session to pick it up.",
+          text: done || "Done. Start a new Hermes session to pick it up.",
         }));
         window.setTimeout(() => void rebuild(), 2600);
       } catch (err) {

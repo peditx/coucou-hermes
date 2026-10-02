@@ -239,6 +239,13 @@ fn hermes_hooks_apply(install: bool, fingerprint: String) -> Result<String, Stri
     hermes_hooks::write(install, &fingerprint)
 }
 
+/// Starts the API server this app talks to — only ever one on this machine:
+/// a server somewhere else is started there, and this returns that message.
+#[tauri::command]
+async fn hermes_start_gateway() -> Result<String, String> {
+    hermes_hooks::start_gateway().await
+}
+
 #[tauri::command]
 fn approval_decision(app: AppHandle, request_id: String, decision: String) {
     pipe::answer(&app, &request_id, &decision);
@@ -501,6 +508,7 @@ pub fn run() {
             hermes_hooks_status,
             hermes_hooks_preview,
             hermes_hooks_apply,
+            hermes_start_gateway,
             approval_decision,
             approval_ack,
             approval_decline,

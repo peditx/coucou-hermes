@@ -9,6 +9,16 @@
 // file is read line by line, one known key is set or removed, and every other
 // line goes back untouched. Anything we do not recognise is an error rather
 // than a guess.
+//
+// Install carries the whole connection, not half of it: config.yaml, the
+// plugin files, ~/.hermes/.env — the API server will not listen without it,
+// because API_SERVER_ENABLED is off by default and the server insists on a
+// key — and the URL/key in the system keyring. Every file gets the same
+// treatment: dated backup, only our own keys, the diff first, write after the
+// click. Uninstall takes our config keys and the plugin away and leaves .env
+// alone: API_SERVER_ENABLED is Hermes's own setting and a key the user wrote
+// is theirs. (ponytail: uninstall .env too, but only while the two lines still
+// hold what we wrote — add when somebody asks.)
 
 use std::path::{Path, PathBuf};
 
@@ -23,6 +33,16 @@ pub const PLUGIN_NAME: &str = "coucou";
 /// second copy of the code. Both files live in the repo at `hermes-plugin/`.
 const PLUGIN_YAML: &str = include_str!("../../../hermes-plugin/plugin.yaml");
 const PLUGIN_PY: &str = include_str!("../../../hermes-plugin/__init__.py");
+
+/// ~/.hermes/.env — where the API server reads its own settings.
+const ENV_ENABLED: &str = "API_SERVER_ENABLED";
+const ENV_KEY: &str = "API_SERVER_KEY";
+/// Shown instead of a key the user does not have yet. The real one is
+/// generated at write time and goes straight to the keyring: never printed,
+/// never in a diff, never in a log.
+const ENV_PLACEHOLDER: &str = "<generated>";
+/// Where the server listens unless .env says otherwise — the documented default.
+const HERMES_URL: &str = "http://127.0.0.1:8642";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,11 +93,121 @@ fn read_config() -> Result<String, String> {
     }
 }
 
-fn current_fingerprint() -> String {
-    match std::fs::read(config_path()) {
-        Ok(bytes) => crate::hooks::fingerprint(&bytes),
-        Err(_) => crate::hooks::fingerprint(b""),
+// ── ~/.hermes/.env ───────────────────────────────────────────────────────────
+
+fn env_path() -> PathBuf {
+    settings::home().join(".hermes").join(".env")
+}
+
+fn env_backup_path() -> PathBuf {
+    env_path().with_file_name(format!(".env.bak-{}", crate::hooks::stamp()))
+}
+
+/// Only "the file is not there" means "start from nothing": an unreadable
+/// .env must stop us, never be replaced by an empty one.
+fn read_env() -> Result<String, String> {
+    match std::fs::read(env_path()) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map_err(|_| ".env is not UTF-8 — nothing was written.".to_string()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(err) => Err(format!("{}: {err}", env_path().display())),
     }
+}
+
+/// The key of a `KEY=value` line: `export` tolerated, comments skipped, and
+/// the match stops at the `=` so `API_SERVER_KEYS` is never taken for ours.
+fn env_line_key(line: &str) -> Option<&str> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
+    }
+    let line = line.strip_prefix("export ").unwrap_or(line);
+    let key = line.split('=').next()?.trim();
+    (!key.is_empty() && !key.chars().any(char::is_whitespace)).then_some(key)
+}
+
+/// The value of `key`, unquoted. `None` means "not set" — which is what an
+/// install looks for before it generates one.
+fn env_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+    text.lines().find_map(|line| {
+        if env_line_key(line) != Some(key) {
+            return None;
+        }
+        Some(strip_quotes(line.split_once('=')?.1.trim()))
+    })
+}
+
+/// Sets `key` (or appends it), keeping every other line byte for byte, and
+/// leaving a line alone whose value already matches — so a `export ` prefix,
+/// the spacing and the comments survive an install the user had done by hand.
+fn set_env_value(original: &str, key: &str, value: &str) -> String {
+    let terminated = original.ends_with('\n');
+    let mut out: Vec<String> = Vec::new();
+    let mut seen = false;
+    for line in original.lines() {
+        if env_line_key(line) != Some(key) {
+            out.push(line.to_string());
+            continue;
+        }
+        if seen {
+            continue; // a second copy of our key: the first one wins
+        }
+        seen = true;
+        let same = line
+            .split_once('=')
+            .is_some_and(|(_, v)| strip_quotes(v.trim()) == value);
+        out.push(if same {
+            line.to_string()
+        } else {
+            format!("{key}={value}")
+        });
+    }
+    let added = !seen;
+    if added {
+        out.push(format!("{key}={value}"));
+    }
+    if out.is_empty() {
+        return String::new();
+    }
+    let mut next = out.join("\n");
+    // The newline the file already had, or one of our own when we are the ones
+    // creating it — a file we do not have to change must not change.
+    if added || terminated {
+        next.push('\n');
+    }
+    next
+}
+
+/// What `.env` must say for the server to listen at all, with `key` as its key.
+fn env_after(current: &str, key: &str) -> String {
+    let next = set_env_value(current, ENV_ENABLED, "true");
+    set_env_value(&next, ENV_KEY, key)
+}
+
+/// Both sides of the `.env` diff with the secret masked. The preview is read
+/// before the key exists and before the keyring has it, so the value has no
+/// business on a screen — or in a screenshot of one.
+fn redact_env(text: &str) -> String {
+    let mask = format!("{ENV_KEY}=••••••••");
+    let mut out: Vec<&str> = Vec::new();
+    for line in text.lines() {
+        out.push(if env_line_key(line) == Some(ENV_KEY) {
+            mask.as_str()
+        } else {
+            line
+        });
+    }
+    out.join("\n")
+}
+
+/// Both files this button is about, hashed together: config.yaml moving or
+/// .env moving must both invalidate a preview.
+fn current_fingerprint() -> Result<String, String> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(read_config()?.as_bytes());
+    bytes.push(0); // a config that ends where .env begins cannot collide
+    bytes.extend_from_slice(read_env()?.as_bytes());
+    Ok(crate::hooks::fingerprint(&bytes))
 }
 
 // ── The line-oriented YAML editor ────────────────────────────────────────────
@@ -512,22 +642,62 @@ pub fn preview(install: bool) -> Result<HermesHookPreview, String> {
     } else {
         without_keys(&current)?
     };
+
+    let env = read_env()?;
+    let existing_key = env_value(&env, ENV_KEY);
+    let env_next = if install {
+        env_after(&env, existing_key.unwrap_or(ENV_PLACEHOLDER))
+    } else {
+        env.clone()
+    };
+
+    // Two files, two headers: the diff is what the user is agreeing to, and
+    // half a recipe is how somebody ends up with a server that never starts.
+    let mut diff = String::new();
+    diff.push_str(&format!("── {}\n", config_path().display()));
+    diff.push_str(&crate::hooks::unified_diff(&current, &next));
+    if env_next != env {
+        diff.push_str(&format!(
+            "\n── {} — a dated copy is taken first\n",
+            env_path().display()
+        ));
+        diff.push_str(&crate::hooks::unified_diff(
+            &redact_env(&env),
+            &redact_env(&env_next),
+        ));
+        diff.push('\n');
+        diff.push_str(if existing_key.is_some() {
+            "→ your existing API_SERVER_KEY is reused\n"
+        } else {
+            "→ a fresh API_SERVER_KEY is generated and kept in your keyring, never printed\n"
+        });
+    }
+    if install {
+        diff.push_str("→ remembered in the system keyring, only what you have not already set:\n");
+        diff.push_str("    hermes-url    = http://127.0.0.1:8642\n");
+        diff.push_str("    hermes-token  = that API_SERVER_KEY\n");
+    }
+
     Ok(HermesHookPreview {
-        diff: crate::hooks::unified_diff(&current, &next),
+        diff,
         backup: backup_path().to_string_lossy().to_string(),
         config_path: config_path().to_string_lossy().to_string(),
         plugin_path: plugin_dir().to_string_lossy().to_string(),
-        fingerprint: current_fingerprint(),
+        fingerprint: current_fingerprint()?,
     })
 }
 
-/// Writes the merged (or cleaned) config and the plugin files, after a backup.
+/// Writes the merged config, `.env` and the plugin files, each behind its own
+/// dated backup. Returns the sentence the settings window shows, so the UI
+/// never has to know which of those files happened to exist.
 pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
     let current = read_config()?;
-    if current_fingerprint() != fingerprint {
+    let env = read_env()?;
+    if current_fingerprint()? != fingerprint {
         return Err(format!(
-            "{} changed since the preview. Nothing was written — review the new diff.",
-            config_path().display()
+            "{} or {} changed since the preview. Nothing was written — review the new diff.",
+            config_path().display(),
+            env_path().display()
         ));
     }
 
@@ -551,14 +721,40 @@ pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
     // already gone and Hermes falls back to its own prompt instead of naming a
     // plugin that is not there.
     if next != current {
-        let path = config_path();
-        let dir = path.parent().unwrap_or(Path::new("."));
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        let temp = config_path().with_extension(format!("yaml.coucou-{}", std::process::id()));
-        std::fs::write(&temp, next.as_bytes()).map_err(|e| format!("write failed: {e}"))?;
-        if let Err(err) = std::fs::rename(&temp, config_path()) {
-            let _ = std::fs::remove_file(&temp);
-            return Err(format!("write failed: {err}"));
+        atomic_write(&config_path(), next.as_bytes())?;
+    }
+
+    // .env next, with its own backup: it is the only file here that carries a
+    // secret, which is why its value never appears in the preview (redact_env)
+    // and why a key the user already wrote is reused rather than replaced.
+    let mut env_backup = String::new();
+    let mut warnings = Vec::new();
+    if install {
+        let token = match env_value(&env, ENV_KEY) {
+            Some(existing) => existing.to_string(),
+            None => generate_key()?,
+        };
+        let env_next = env_after(&env, &token);
+        if env_next != env {
+            if !env.is_empty() {
+                let path = env_backup_path();
+                std::fs::copy(env_path(), &path).map_err(|e| format!(".env backup failed: {e}"))?;
+                env_backup = path.to_string_lossy().to_string();
+            }
+            atomic_write(&env_path(), env_next.as_bytes())?;
+        }
+
+        // Remember the connection — but never overwrite a URL or a key the
+        // user typed into the keyring themselves.
+        if !crate::secrets::present("hermes-url") {
+            if let Err(err) = crate::secrets::set("hermes-url", HERMES_URL) {
+                warnings.push(format!("hermes-url: {err}"));
+            }
+        }
+        if !crate::secrets::present("hermes-token") {
+            if let Err(err) = crate::secrets::set("hermes-token", &token) {
+                warnings.push(format!("hermes-token: {err}"));
+            }
         }
     }
 
@@ -573,7 +769,156 @@ pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
         let _ = std::fs::remove_dir_all(plugin_dir());
     }
 
-    Ok(backup)
+    Ok(done_message(&backup, &env_backup, &warnings))
+}
+
+/// Temp file beside the target, then rename: a crash mid-write cannot leave
+/// half a file where a config used to be.
+fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
+    let name = target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("{}: no file name to write", target.display()))?;
+    let temp = target.with_file_name(format!("{name}.coucou-{}", std::process::id()));
+    std::fs::write(&temp, bytes).map_err(|e| format!("write failed: {e}"))?;
+    if let Err(err) = std::fs::rename(&temp, target) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(format!("write failed: {err}"));
+    }
+    Ok(())
+}
+
+/// 32 bytes of system randomness, hex — only for a key the user does not
+/// already have. A key they typed is kept exactly as they typed it.
+fn generate_key() -> Result<String, String> {
+    let mut buf = [0u8; 32];
+    getrandom::fill(&mut buf).map_err(|e| format!("no system randomness available: {e}"))?;
+    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+fn done_message(backup: &str, env_backup: &str, warnings: &[String]) -> String {
+    let mut msg = match (backup.is_empty(), env_backup.is_empty()) {
+        (true, true) => "Done. Start a new Hermes session to pick it up.".to_string(),
+        (false, true) => format!(
+            "Done. Previous config saved as {backup}. Start a new Hermes session to pick it up."
+        ),
+        (true, false) => format!(
+            "Done. Previous .env saved as {env_backup}. Start a new Hermes session to pick it up."
+        ),
+        (false, false) => format!(
+            "Done. Saved as {backup} and {env_backup}. Start a new Hermes session to pick it up."
+        ),
+    };
+    if !warnings.is_empty() {
+        msg.push(' ');
+        msg.push_str(&format!(
+            "Keyring: {} — put the URL and the key in Settings by hand.",
+            warnings.join(", ")
+        ));
+    }
+    msg
+}
+
+// ── Starting the API server ──────────────────────────────────────────────────
+
+/// `hermes gateway`, detached: the server is Hermes's process, not ours, and
+/// it has to outlive the settings window — and Coucou itself.
+///
+/// ponytail: on Windows a `hermes.cmd` shim would not be found (CreateProcess
+/// only appends `.exe`); the installer writes `hermes.exe`, and if that ever
+/// changes the fix is to look for the shim ourselves.
+pub async fn start_gateway() -> Result<String, String> {
+    let saved = crate::secrets::get("hermes-url").unwrap_or_else(|| HERMES_URL.to_string());
+    let url = saved.trim().trim_end_matches('/');
+    if !is_local(url) {
+        return Err(format!(
+            "{url} is not this machine — start it where it runs: hermes gateway"
+        ));
+    }
+    if probe(url).await.is_some() {
+        return Ok(format!("The API server is already up at {url}."));
+    }
+
+    let log = settings::local_dir().join("hermes-gateway.log");
+    if let Some(dir) = log.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log)
+        .map_err(|e| format!("{}: {e}", log.display()))?;
+    let err_file = file
+        .try_clone()
+        .map_err(|e| format!("{}: {e}", log.display()))?;
+
+    let mut cmd = std::process::Command::new("hermes");
+    cmd.arg("gateway")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::from(file))
+        .stderr(std::process::Stdio::from(err_file));
+    // Its own session, so closing Coucou (or a terminal) cannot SIGHUP it.
+    #[cfg(unix)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW — no console flash
+    }
+    cmd.spawn().map_err(|err| match err.kind() {
+        std::io::ErrorKind::NotFound => {
+            "hermes is not on PATH — install it first (the command is at the top of this window)."
+                .to_string()
+        }
+        other => format!("could not run `hermes gateway`: {other}"),
+    })?;
+    crate::log::line("hermes: started `hermes gateway`");
+    Ok(format!(
+        "Started `hermes gateway` — listening on {url} in a second or two. Log: {}",
+        log.display()
+    ))
+}
+
+/// Only a server on this machine can be started by us; anything else has to
+/// be started where it runs.
+fn is_local(url: &str) -> bool {
+    let host = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .rsplit('@')
+        .next()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim_matches(|c| c == '[' || c == ']');
+    host.is_empty() || matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+}
+
+/// Any HTTP answer at all means something is already listening — even a 401
+/// or a 404, which a wrong path would give. Only a connection failure means
+/// we should start a server.
+async fn probe(url: &str) -> Option<()> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let mut request = client.get(format!("{url}/health"));
+    if let Some(token) = crate::secrets::get("hermes-token") {
+        request = request.header("authorization", format!("Bearer {token}"));
+    }
+    request.send().await.ok().map(|_| ())
 }
 
 #[cfg(test)]
@@ -676,5 +1021,70 @@ plugins:
         assert!(!has_transport(
             "mcp_servers:\n  coucou:\n    url: http://x\n"
         ));
+    }
+
+    const ENV_TEXT: &str = "# my env\nFOO=bar\nexport API_SERVER_KEY='their key'\n";
+
+    #[test]
+    fn env_install_is_idempotent_and_keeps_their_lines() {
+        let once = env_after(ENV_TEXT, "their key");
+        assert!(once.contains("API_SERVER_ENABLED=true"));
+        assert!(
+            once.contains("export API_SERVER_KEY='their key'"),
+            "their line survives"
+        );
+        assert!(once.contains("# my env"), "comments survive");
+        assert_eq!(once.matches("API_SERVER_ENABLED").count(), 1);
+        assert_eq!(
+            env_after(&once, "their key"),
+            once,
+            "a second install changes nothing"
+        );
+    }
+
+    #[test]
+    fn env_lookalike_lines_are_never_ours() {
+        assert_eq!(env_value("API_SERVER_KEYS=x\n", ENV_KEY), None);
+        assert_eq!(env_value("#API_SERVER_KEY=x\n", ENV_KEY), None);
+        assert_eq!(
+            env_value("  export API_SERVER_KEY=\"spaced\"\n", ENV_KEY),
+            Some("spaced")
+        );
+        assert_eq!(env_value("", ENV_KEY), None);
+    }
+
+    #[test]
+    fn a_file_we_do_not_have_to_change_does_not_change() {
+        let text = "API_SERVER_ENABLED=true\nAPI_SERVER_KEY=abc\n";
+        assert_eq!(env_after(text, "abc"), text);
+        let no_newline = "API_SERVER_KEY=abc";
+        assert_eq!(set_env_value(no_newline, ENV_KEY, "abc"), no_newline);
+    }
+
+    #[test]
+    fn the_key_is_masked_on_both_sides_of_the_diff() {
+        let before = "FOO=1\nAPI_SERVER_KEY=super-secret\n";
+        let after = env_after(before, "super-secret");
+        assert!(!redact_env(before).contains("super-secret"));
+        assert!(!redact_env(after).contains("super-secret"));
+        assert!(redact_env(after).contains("API_SERVER_KEY=••••••••"));
+        assert!(redact_env(after).contains("API_SERVER_ENABLED=true"));
+    }
+
+    #[test]
+    fn generated_keys_are_32_bytes_of_hex() {
+        let key = generate_key().unwrap();
+        assert_eq!(key.len(), 64);
+        assert!(key.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(key, generate_key().unwrap());
+    }
+
+    #[test]
+    fn only_this_machines_url_is_ours_to_start() {
+        assert!(is_local("http://127.0.0.1:8642"));
+        assert!(is_local("http://localhost:8642"));
+        assert!(is_local("https://[::1]:8642"));
+        assert!(!is_local("https://agent.example.com"));
+        assert!(!is_local("http://100.x.y.z:8642"));
     }
 }
