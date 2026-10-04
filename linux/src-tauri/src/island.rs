@@ -228,6 +228,7 @@ fn current_screen_key(app: &AppHandle) -> Option<(i32, i32, u32, u32, u64)> {
 pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
     std::thread::spawn(move || {
         let mut was_down = false;
+        let mut cursor_ok = true;
         // Remembered across wakes so a display change while hidden is noticed the
         // moment the island comes back.
         let mut last_screen: Option<(i32, i32, u32, u32, u64)> = None;
@@ -262,9 +263,17 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 // the window flag alone so a pointerless session never eats a
                 // click it cannot attribute to the island.
                 let Some((cx, cy)) = cursor_physical(&app) else {
+                    if cursor_ok {
+                        cursor_ok = false;
+                        crate::log::line("cursor unavailable".to_string());
+                    }
                     std::thread::sleep(Duration::from_millis(500));
                     continue;
                 };
+                if !cursor_ok {
+                    cursor_ok = true;
+                    crate::log::line("cursor back".to_string());
+                }
                 let x = (cx - origin.x as f64) / scale;
                 let y = (cy - origin.y as f64) / scale;
                 let size = match win.inner_size() {
@@ -313,6 +322,18 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 if gate.ignoring.load(Ordering::Relaxed) == accept {
                     gate.ignoring.store(!accept, Ordering::Relaxed);
                     let _ = win.set_ignore_cursor_events(!accept);
+                    crate::log::line(format!(
+                        "cursor {:.0},{:.0} origin {},{} rect {:.0},{:.0} {:.0}x{:.0} -> {}",
+                        cx,
+                        cy,
+                        origin.x,
+                        origin.y,
+                        r.x,
+                        r.y,
+                        r.w,
+                        r.h,
+                        if accept { "take" } else { "pass" }
+                    ));
                 }
 
                 let _ = win.emit("cursor", CursorPayload { x, y });

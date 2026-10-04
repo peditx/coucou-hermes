@@ -357,6 +357,18 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                 if gate.ignoring.load(Ordering::Relaxed) == accept {
                     gate.ignoring.store(!accept, Ordering::Relaxed);
                     let _ = win.set_ignore_cursor_events(!accept);
+                    crate::log::line(format!(
+                        "cursor {:.0},{:.0} origin {},{} rect {:.0},{:.0} {:.0}x{:.0} -> {}",
+                        cx,
+                        cy,
+                        origin.x,
+                        origin.y,
+                        r.x,
+                        r.y,
+                        r.w,
+                        r.h,
+                        if accept { "take" } else { "pass" }
+                    ));
                 }
 
                 let _ = win.emit("cursor", CursorPayload { x, y });

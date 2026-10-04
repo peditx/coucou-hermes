@@ -98,6 +98,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
 #[tauri::command]
 fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
     let pref = shared.settings.lock().unwrap().screen.clone();
+    log::line(format!("collapse {collapsed}"));
     shared.gate.collapsed.store(collapsed, Ordering::Relaxed);
     island::apply_geometry(&app, &pref, collapsed);
     // The wake strip must always take the mouse, and a resize invalidates the flag.
@@ -109,6 +110,7 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
 /// The front end pushes the island shape; Rust decides click-through from it.
 #[tauri::command]
 fn set_island_rect(shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
+    log::line(format!("rect {:.0},{:.0} {:.0}x{:.0}", x, y, width, height));
     shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
 }
 
