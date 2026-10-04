@@ -349,7 +349,11 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     && y >= 0.0
                     && y <= size.1;
 
-                let accept = on_island || dragging;
+                // Hidden, the wake strip owns the mouse: `set_collapsed` said so
+                // just before parking this thread, and an in-flight tick must not
+                // take it back — the strip could then never deliver the hover that
+                // wakes the island again.
+                let accept = on_island || dragging || gate.collapsed.load(Ordering::Relaxed);
                 if gate.ignoring.load(Ordering::Relaxed) == accept {
                     gate.ignoring.store(!accept, Ordering::Relaxed);
                     let _ = win.set_ignore_cursor_events(!accept);
