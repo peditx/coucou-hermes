@@ -17,9 +17,14 @@ fn main() {
 ///   * `DISPLAY` must already be set — that is XWayland being present. Forcing the
 ///     x11 backend without it would stop the app from starting at all, which is
 ///     worse than not being pinned to the top edge;
-///   * an explicit `GDK_BACKEND` is never overridden: whoever set it knows better.
+///   * an explicit `GDK_BACKEND` is honoured only when it already reads `x11`,
+///     which is what GDK itself resolves from the first entry of a comma list.
+///     Anything else — most often a stray `wayland` exported by a terminal or a
+///     profile for its own sake, never for Coucou — would hand back a window we
+///     may not position, and an island in the wrong place is a broken island.
 fn choose_windowing_backend() {
-    if std::env::var_os("GDK_BACKEND").is_some() {
+    let explicit = std::env::var("GDK_BACKEND").unwrap_or_default();
+    if explicit.split(',').next().map(str::trim) == Some("x11") {
         return;
     }
     let on_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
