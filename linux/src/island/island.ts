@@ -70,7 +70,6 @@ export class Island {
   private collapsed = false;
   private collapseTimer: number | null = null;
   private wasInIsland = false;
-  private cursorSeen = false;
   /** Last shape handed to Rust for the click-through test. */
   private pushedRect = { x: -1, y: -1, w: -1, h: -1 };
   private homeCollapseAt: number | null = null;
@@ -576,16 +575,6 @@ export class Island {
     const inIsland =
       x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&
       y >= rect.y - HIT_MARGIN && y <= rect.y + rect.h + HIT_MARGIN;
-
-    if (!this.cursorSeen) {
-      this.cursorSeen = true;
-      void Bridge.log(`cursor first ${x.toFixed(0)},${y.toFixed(0)} mode=${State.mode}`);
-    }
-    if (inIsland !== this.wasInIsland) {
-      void Bridge.log(
-        `hover ${inIsland ? "in" : "out"} ${x.toFixed(0)},${y.toFixed(0)} mode=${State.mode}`,
-      );
-    }
 
     if (inIsland && !this.wasInIsland) {
       if (this.fsm.state === "coucou") this.greeting.hover();
