@@ -112,6 +112,7 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
 fn set_island_rect(shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
     log::line(format!("rect {:.0},{:.0} {:.0}x{:.0}", x, y, width, height));
     shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
+    shared.gate.forget_ignore_state();
 }
 
 #[tauri::command]
